@@ -14,6 +14,9 @@
       --text: #e8e8f0;
       --muted: #6b6b80;
       --accent: #7c6af7;
+      --green: #4ade80;
+      --yellow: #fbbf24;
+      --red: #f87171;
     }
 
     * { box-sizing: border-box; margin: 0; padding: 0; }
@@ -23,40 +26,56 @@
       color: var(--text);
       font-family: 'Inter', sans-serif;
       min-height: 100vh;
+      padding: 40px 20px;
     }
 
     header {
       max-width: 900px;
-      margin: 0 auto;
-      padding: 60px 20px 40px;
-      text-align: center;
+      margin: 0 auto 48px;
+      display: flex;
+      align-items: flex-end;
+      justify-content: space-between;
+      gap: 16px;
+      flex-wrap: wrap;
     }
 
-    .logo {
+    .title-block h1 {
       font-family: 'IBM Plex Mono', monospace;
-      font-size: 14px;
-      color: var(--accent);
-      letter-spacing: 1px;
-      margin-bottom: 16px;
-    }
-
-    h1 {
-      font-size: 32px;
-      font-weight: 700;
+      font-size: 22px;
+      font-weight: 600;
       letter-spacing: -0.5px;
-      margin-bottom: 12px;
+      color: var(--text);
     }
 
-    .subtitle {
-      font-size: 15px;
+    .title-block p {
+      font-size: 13px;
       color: var(--muted);
-      line-height: 1.6;
+      margin-top: 6px;
+      font-family: 'IBM Plex Mono', monospace;
     }
+
+    .fetch-btn {
+      background: var(--accent);
+      color: #fff;
+      border: none;
+      padding: 10px 22px;
+      border-radius: 6px;
+      font-size: 14px;
+      font-weight: 600;
+      cursor: pointer;
+      font-family: 'IBM Plex Mono', monospace;
+      letter-spacing: 0.2px;
+      transition: opacity 0.15s, transform 0.1s;
+      white-space: nowrap;
+    }
+
+    .fetch-btn:hover { opacity: 0.88; }
+    .fetch-btn:active { transform: scale(0.97); }
+    .fetch-btn:disabled { opacity: 0.4; cursor: not-allowed; }
 
     .companies {
       max-width: 900px;
       margin: 0 auto;
-      padding: 0 20px 60px;
       display: flex;
       flex-direction: column;
       gap: 16px;
@@ -66,10 +85,15 @@
       background: var(--surface);
       border: 1px solid var(--border);
       border-radius: 10px;
-      padding: 20px;
+      overflow: hidden;
+    }
+
+    .company-header {
       display: flex;
       align-items: center;
-      gap: 14px;
+      gap: 12px;
+      padding: 16px 20px;
+      border-bottom: 1px solid var(--border);
     }
 
     .company-dot {
@@ -81,93 +105,164 @@
 
     .company-name {
       font-family: 'IBM Plex Mono', monospace;
-      font-size: 14px;
+      font-size: 13px;
       font-weight: 600;
+      color: var(--text);
       flex: 1;
     }
 
-    .coming-soon {
-      font-size: 12px;
-      color: var(--muted);
+    .status-badge {
+      font-size: 11px;
       font-family: 'IBM Plex Mono', monospace;
-      background: var(--border);
-      padding: 4px 10px;
+      padding: 3px 8px;
       border-radius: 4px;
-    }
-
-    .notice {
-      max-width: 900px;
-      margin: 0 auto 60px;
-      padding: 0 20px;
-      text-align: center;
-    }
-
-    .notice-box {
-      background: var(--surface);
-      border: 1px solid var(--border);
-      border-radius: 10px;
-      padding: 24px;
-      font-size: 13px;
       color: var(--muted);
-      line-height: 1.7;
+      background: var(--border);
     }
 
-    footer {
-      text-align: center;
-      padding: 30px 20px;
+    .status-badge.loading {
+      color: var(--yellow);
+      background: rgba(251, 191, 36, 0.1);
+      animation: pulse 1.2s ease-in-out infinite;
+    }
+
+    .status-badge.done {
+      color: var(--green);
+      background: rgba(74, 222, 128, 0.1);
+    }
+
+    .status-badge.error {
+      color: var(--red);
+      background: rgba(248, 113, 113, 0.1);
+    }
+
+    @keyframes pulse {
+      0%, 100% { opacity: 1; }
+      50% { opacity: 0.5; }
+    }
+
+    .company-body {
+      padding: 20px;
+      font-size: 14px;
+      line-height: 1.7;
+      color: var(--text);
+      white-space: pre-wrap;
+      font-family: 'Inter', sans-serif;
+      min-height: 60px;
+    }
+
+    .placeholder {
+      color: var(--muted);
+      font-size: 13px;
+      font-family: 'IBM Plex Mono', monospace;
+    }
+
+    .timestamp {
+      max-width: 900px;
+      margin: 20px auto 0;
       font-size: 12px;
       color: var(--muted);
       font-family: 'IBM Plex Mono', monospace;
-      border-top: 1px solid var(--border);
+      text-align: right;
     }
   </style>
 </head>
 <body>
 
 <header>
-  <div class="logo">AI TOOLS KR</div>
-  <h1>한국어로 정리된 AI 도구 모음</h1>
-  <p class="subtitle">ChatGPT만 알던 당신을 위한, 새로 나온 AI 도구들을 한눈에</p>
+  <div class="title-block">
+    <h1>// AI TOOLS KR</h1>
+    <p>Anthropic · OpenAI · Google · Meta · Mistral</p>
+  </div>
+  <button class="fetch-btn" id="fetchBtn" onclick="fetchAll()">최신 정보 가져오기</button>
 </header>
 
-<div class="companies">
-  <div class="company-card">
-    <div class="company-dot" style="background:#7c6af7"></div>
-    <span class="company-name">Anthropic (Claude)</span>
-    <span class="coming-soon">준비중</span>
-  </div>
-  <div class="company-card">
-    <div class="company-dot" style="background:#10b981"></div>
-    <span class="company-name">OpenAI (ChatGPT)</span>
-    <span class="coming-soon">준비중</span>
-  </div>
-  <div class="company-card">
-    <div class="company-dot" style="background:#3b82f6"></div>
-    <span class="company-name">Google (Gemini)</span>
-    <span class="coming-soon">준비중</span>
-  </div>
-  <div class="company-card">
-    <div class="company-dot" style="background:#f59e0b"></div>
-    <span class="company-name">Meta (Llama)</span>
-    <span class="coming-soon">준비중</span>
-  </div>
-  <div class="company-card">
-    <div class="company-dot" style="background:#ec4899"></div>
-    <span class="company-name">Mistral AI</span>
-    <span class="coming-soon">준비중</span>
-  </div>
-</div>
+<div class="companies" id="companies"></div>
+<div class="timestamp" id="timestamp"></div>
 
-<div class="notice">
-  <div class="notice-box">
-    🚧 사이트 구축 중입니다. 곧 최신 AI 도구 정보와 비교, 그리고<br>
-    AI 사기 앱 구별법 같은 콘텐츠가 추가될 예정입니다.
-  </div>
-</div>
+<script>
+  const COMPANIES = [
+    { id: 'anthropic', name: 'Anthropic', color: '#7c6af7', query: 'Anthropic Claude latest model release update 2026' },
+    { id: 'openai',    name: 'OpenAI',    color: '#10b981', query: 'OpenAI GPT latest model release update 2026' },
+    { id: 'google',    name: 'Google DeepMind', color: '#3b82f6', query: 'Google Gemini latest model release update 2026' },
+    { id: 'meta',      name: 'Meta AI',   color: '#f59e0b', query: 'Meta Llama latest model release update 2026' },
+    { id: 'mistral',   name: 'Mistral AI', color: '#ec4899', query: 'Mistral AI latest model release update 2026' },
+  ];
 
-<footer>
-  © 2026 AI TOOLS KR
-</footer>
+  function initCards() {
+    const container = document.getElementById('companies');
+    container.innerHTML = COMPANIES.map(c => `
+      <div class="company-card" id="card-${c.id}">
+        <div class="company-header">
+          <div class="company-dot" style="background:${c.color}"></div>
+          <span class="company-name">${c.name}</span>
+          <span class="status-badge" id="status-${c.id}">대기중</span>
+        </div>
+        <div class="company-body" id="body-${c.id}">
+          <span class="placeholder">버튼을 눌러 최신 정보를 불러오세요</span>
+        </div>
+      </div>
+    `).join('');
+  }
 
+  function setStatus(id, state) {
+    const el = document.getElementById(`status-${id}`);
+    el.className = 'status-badge';
+    if (state === 'loading') { el.classList.add('loading'); el.textContent = '검색중...'; }
+    else if (state === 'done') { el.classList.add('done'); el.textContent = '완료'; }
+    else if (state === 'error') { el.classList.add('error'); el.textContent = '오류'; }
+    else { el.textContent = '대기중'; }
+  }
+
+  function setBody(id, text) {
+    document.getElementById(`body-${id}`).innerHTML = text;
+  }
+
+  async function fetchCompany(company) {
+    setStatus(company.id, 'loading');
+    setBody(company.id, '<span class="placeholder">검색 중...</span>');
+
+    try {
+      const res = await fetch('/api/fetch-company', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ companyName: company.name, query: company.query }),
+      });
+
+      const data = await res.json();
+
+      if (data.error) throw new Error(data.error);
+
+      const html = (data.text || '정보를 가져오지 못했습니다.')
+        .replace(/\*\*(.*?)\*\*/g, '<strong>$1</strong>')
+        .replace(/^- (.+)$/gm, '• $1')
+        .replace(/\n/g, '<br>');
+
+      setBody(company.id, html);
+      setStatus(company.id, 'done');
+
+    } catch (err) {
+      setBody(company.id, `<span style="color:var(--red)">오류: ${err.message}</span>`);
+      setStatus(company.id, 'error');
+    }
+  }
+
+  async function fetchAll() {
+    const btn = document.getElementById('fetchBtn');
+    btn.disabled = true;
+    btn.textContent = '가져오는 중...';
+
+    await Promise.all(COMPANIES.map(c => fetchCompany(c)));
+
+    const now = new Date();
+    document.getElementById('timestamp').textContent =
+      `마지막 업데이트: ${now.toLocaleDateString('ko-KR')} ${now.toLocaleTimeString('ko-KR')}`;
+
+    btn.disabled = false;
+    btn.textContent = '다시 가져오기';
+  }
+
+  initCards();
+</script>
 </body>
 </html>
