@@ -31,7 +31,7 @@ Keep it short and factual. No fluff.`;
         model: 'claude-haiku-4-5-20251001',
         max_tokens: 1000,
         system: systemPrompt,
-        tools: [{ type: 'web_search_20250305', name: 'web_search' }],
+        tools: [{ type: 'web_search_20250305', name: 'web_search', max_uses: 1 }],
         messages: [
           {
             role: 'user',
