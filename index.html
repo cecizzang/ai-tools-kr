@@ -1,0 +1,173 @@
+<!DOCTYPE html>
+<html lang="ko">
+<head>
+  <meta charset="UTF-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+  <title>AI Tools KR - AI 도구 정리</title>
+  <style>
+    @import url('https://fonts.googleapis.com/css2?family=IBM+Plex+Mono:wght@400;600&family=Inter:wght@400;500;600;700&display=swap');
+
+    :root {
+      --bg: #0d0d0f;
+      --surface: #141418;
+      --border: #1f1f28;
+      --text: #e8e8f0;
+      --muted: #6b6b80;
+      --accent: #7c6af7;
+    }
+
+    * { box-sizing: border-box; margin: 0; padding: 0; }
+
+    body {
+      background: var(--bg);
+      color: var(--text);
+      font-family: 'Inter', sans-serif;
+      min-height: 100vh;
+    }
+
+    header {
+      max-width: 900px;
+      margin: 0 auto;
+      padding: 60px 20px 40px;
+      text-align: center;
+    }
+
+    .logo {
+      font-family: 'IBM Plex Mono', monospace;
+      font-size: 14px;
+      color: var(--accent);
+      letter-spacing: 1px;
+      margin-bottom: 16px;
+    }
+
+    h1 {
+      font-size: 32px;
+      font-weight: 700;
+      letter-spacing: -0.5px;
+      margin-bottom: 12px;
+    }
+
+    .subtitle {
+      font-size: 15px;
+      color: var(--muted);
+      line-height: 1.6;
+    }
+
+    .companies {
+      max-width: 900px;
+      margin: 0 auto;
+      padding: 0 20px 60px;
+      display: flex;
+      flex-direction: column;
+      gap: 16px;
+    }
+
+    .company-card {
+      background: var(--surface);
+      border: 1px solid var(--border);
+      border-radius: 10px;
+      padding: 20px;
+      display: flex;
+      align-items: center;
+      gap: 14px;
+    }
+
+    .company-dot {
+      width: 8px;
+      height: 8px;
+      border-radius: 50%;
+      flex-shrink: 0;
+    }
+
+    .company-name {
+      font-family: 'IBM Plex Mono', monospace;
+      font-size: 14px;
+      font-weight: 600;
+      flex: 1;
+    }
+
+    .coming-soon {
+      font-size: 12px;
+      color: var(--muted);
+      font-family: 'IBM Plex Mono', monospace;
+      background: var(--border);
+      padding: 4px 10px;
+      border-radius: 4px;
+    }
+
+    .notice {
+      max-width: 900px;
+      margin: 0 auto 60px;
+      padding: 0 20px;
+      text-align: center;
+    }
+
+    .notice-box {
+      background: var(--surface);
+      border: 1px solid var(--border);
+      border-radius: 10px;
+      padding: 24px;
+      font-size: 13px;
+      color: var(--muted);
+      line-height: 1.7;
+    }
+
+    footer {
+      text-align: center;
+      padding: 30px 20px;
+      font-size: 12px;
+      color: var(--muted);
+      font-family: 'IBM Plex Mono', monospace;
+      border-top: 1px solid var(--border);
+    }
+  </style>
+</head>
+<body>
+
+<header>
+  <div class="logo">AI TOOLS KR</div>
+  <h1>한국어로 정리된 AI 도구 모음</h1>
+  <p class="subtitle">ChatGPT만 알던 당신을 위한, 새로 나온 AI 도구들을 한눈에</p>
+</header>
+
+<div class="companies">
+  <div class="company-card">
+    <div class="company-dot" style="background:#7c6af7"></div>
+    <span class="company-name">Anthropic (Claude)</span>
+    <span class="coming-soon">준비중</span>
+  </div>
+  <div class="company-card">
+    <div class="company-dot" style="background:#10b981"></div>
+    <span class="company-name">OpenAI (ChatGPT)</span>
+    <span class="coming-soon">준비중</span>
+  </div>
+  <div class="company-card">
+    <div class="company-dot" style="background:#3b82f6"></div>
+    <span class="company-name">Google (Gemini)</span>
+    <span class="coming-soon">준비중</span>
+  </div>
+  <div class="company-card">
+    <div class="company-dot" style="background:#f59e0b"></div>
+    <span class="company-name">Meta (Llama)</span>
+    <span class="coming-soon">준비중</span>
+  </div>
+  <div class="company-card">
+    <div class="company-dot" style="background:#ec4899"></div>
+    <span class="company-name">Mistral AI</span>
+    <span class="coming-soon">준비중</span>
+  </div>
+</div>
+
+<div class="notice">
+  <div class="notice-box">
+    🚧 사이트 구축 중입니다. 곧 최신 AI 도구 정보와 비교, 그리고<br>
+    AI 사기 앱 구별법 같은 콘텐츠가 추가될 예정입니다.
+  </div>
+</div>
+
+<footer>
+  © 2026 AI TOOLS KR
+</footer>
+
+</body>
+</html>
