@@ -73,6 +73,35 @@
     .fetch-btn:active { transform: scale(0.97); }
     .fetch-btn:disabled { opacity: 0.4; cursor: not-allowed; }
 
+    .header-actions {
+      display: flex;
+      align-items: center;
+      gap: 10px;
+      flex-wrap: wrap;
+    }
+
+    .donate-btn {
+      display: inline-flex;
+      align-items: center;
+      gap: 6px;
+      background: #ffdd00;
+      color: #0d0d0f;
+      border: none;
+      padding: 10px 18px;
+      border-radius: 6px;
+      font-size: 14px;
+      font-weight: 600;
+      cursor: pointer;
+      font-family: 'IBM Plex Mono', monospace;
+      letter-spacing: 0.2px;
+      text-decoration: none;
+      transition: opacity 0.15s, transform 0.1s;
+      white-space: nowrap;
+    }
+
+    .donate-btn:hover { opacity: 0.88; }
+    .donate-btn:active { transform: scale(0.97); }
+
     .companies {
       max-width: 900px;
       margin: 0 auto;
@@ -174,13 +203,55 @@
     <h1>// AI TOOLS KR</h1>
     <p>Anthropic · OpenAI · Google · Meta · Mistral</p>
   </div>
-  <button class="fetch-btn" id="fetchBtn" onclick="fetchAll()">최신 정보 가져오기</button>
+  <div class="header-actions">
+    <a
+      class="donate-btn"
+      id="donateBtn"
+      href="https://buymeacoffee.com/cecizzang"
+      target="_blank"
+      rel="noopener noreferrer"
+      onclick="logUsage('donate_click')"
+    >☕ 후원하기</a>
+    <button class="fetch-btn" id="fetchBtn" onclick="fetchAll()">최신 정보 가져오기</button>
+  </div>
 </header>
 
 <div class="companies" id="companies"></div>
 <div class="timestamp" id="timestamp"></div>
 
 <script>
+  // Publishable key is safe to expose client-side by design (RLS enforces access control server-side).
+  const SUPABASE_URL = 'https://clpwrmxegqvzzcqcxdsa.supabase.co';
+  const SUPABASE_ANON_KEY = 'sb_publishable_PiSGtCuULXpdHlOgYdWK0A_jmTgqIXQ';
+
+  function getSessionId() {
+    try {
+      let id = localStorage.getItem('atk_session_id');
+      if (!id) {
+        id = crypto.randomUUID();
+        localStorage.setItem('atk_session_id', id);
+      }
+      return id;
+    } catch {
+      return null; // localStorage unavailable (e.g. private browsing) — log without a session id
+    }
+  }
+
+  function logUsage(eventType, companyId = null) {
+    if (!SUPABASE_URL || SUPABASE_URL.includes('YOUR_PROJECT')) return; // not configured yet
+
+    fetch(`${SUPABASE_URL}/rest/v1/usage_logs`, {
+      method: 'POST',
+      headers: {
+        'Content-Type': 'application/json',
+        apikey: SUPABASE_ANON_KEY,
+        Authorization: `Bearer ${SUPABASE_ANON_KEY}`,
+        Prefer: 'return=minimal',
+      },
+      body: JSON.stringify({ event_type: eventType, company_id: companyId, session_id: getSessionId() }),
+    }).catch(() => {}); // best-effort logging — never block the user's action on this failing
+  }
+
   const COMPANIES = [
     { id: 'anthropic', name: 'Anthropic', color: '#7c6af7', query: 'Anthropic Claude latest model release update 2026' },
     { id: 'openai',    name: 'OpenAI',    color: '#10b981', query: 'OpenAI GPT latest model release update 2026' },
