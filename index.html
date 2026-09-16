@@ -59,25 +59,6 @@
       font-family: 'IBM Plex Mono', monospace;
     }
 
-    .fetch-btn {
-      background: var(--accent);
-      color: #fff;
-      border: none;
-      padding: 10px 22px;
-      border-radius: 6px;
-      font-size: 14px;
-      font-weight: 600;
-      cursor: pointer;
-      font-family: 'IBM Plex Mono', monospace;
-      letter-spacing: 0.2px;
-      transition: opacity 0.15s, transform 0.1s;
-      white-space: nowrap;
-    }
-
-    .fetch-btn:hover { opacity: 0.88; }
-    .fetch-btn:active { transform: scale(0.97); }
-    .fetch-btn:disabled { opacity: 0.4; cursor: not-allowed; }
-
     .header-actions {
       display: flex;
       align-items: center;
@@ -191,14 +172,6 @@
       font-family: 'IBM Plex Mono', monospace;
     }
 
-    .timestamp {
-      max-width: 900px;
-      margin: 20px auto 0;
-      font-size: 12px;
-      color: var(--muted);
-      font-family: 'IBM Plex Mono', monospace;
-      text-align: right;
-    }
   </style>
 </head>
 <body>
@@ -217,12 +190,10 @@
       rel="noopener noreferrer"
       onclick="logUsage('donate_click')"
     >☕ 후원하기</a>
-    <button class="fetch-btn" id="fetchBtn" onclick="fetchAll()">최신 정보 가져오기</button>
   </div>
 </header>
 
 <div class="companies" id="companies"></div>
-<div class="timestamp" id="timestamp"></div>
 
 <script>
   // Publishable key is safe to expose client-side by design (RLS enforces access control server-side).
@@ -258,11 +229,11 @@
   }
 
   const COMPANIES = [
-    { id: 'anthropic', name: 'Anthropic', color: '#7c6af7', query: 'Anthropic Claude latest model release update 2026' },
-    { id: 'openai',    name: 'OpenAI',    color: '#10b981', query: 'OpenAI GPT latest model release update 2026' },
-    { id: 'google',    name: 'Google DeepMind', color: '#3b82f6', query: 'Google Gemini latest model release update 2026' },
-    { id: 'meta',      name: 'Meta AI',   color: '#f59e0b', query: 'Meta Llama latest model release update 2026' },
-    { id: 'mistral',   name: 'Mistral AI', color: '#ec4899', query: 'Mistral AI latest model release update 2026' },
+    { id: 'anthropic', name: 'Anthropic', color: '#7c6af7' },
+    { id: 'openai',    name: 'OpenAI',    color: '#10b981' },
+    { id: 'google',    name: 'Google DeepMind', color: '#3b82f6' },
+    { id: 'meta',      name: 'Meta AI',   color: '#f59e0b' },
+    { id: 'mistral',   name: 'Mistral AI', color: '#ec4899' },
   ];
 
   function initCards() {
@@ -272,73 +243,78 @@
         <div class="company-header">
           <div class="company-dot" style="background:${c.color}"></div>
           <span class="company-name">${c.name}</span>
-          <span class="status-badge" id="status-${c.id}">대기중</span>
+          <span class="status-badge" id="status-${c.id}">불러오는 중</span>
         </div>
-        <div class="company-body" id="body-${c.id}">
-          <span class="placeholder">버튼을 눌러 최신 정보를 불러오세요</span>
-        </div>
+        <div class="company-body placeholder" id="body-${c.id}"></div>
       </div>
     `).join('');
+    COMPANIES.forEach(c => {
+      setStatus(c.id, 'loading');
+      setBody(c.id, '불러오는 중...', { placeholder: true });
+    });
   }
 
-  function setStatus(id, state) {
+  function setStatus(id, state, text) {
     const el = document.getElementById(`status-${id}`);
     el.className = 'status-badge';
-    if (state === 'loading') { el.classList.add('loading'); el.textContent = '검색중...'; }
-    else if (state === 'done') { el.classList.add('done'); el.textContent = '완료'; }
-    else if (state === 'error') { el.classList.add('error'); el.textContent = '오류'; }
-    else { el.textContent = '대기중'; }
+    if (state === 'loading') { el.classList.add('loading'); el.textContent = text || '불러오는 중'; }
+    else if (state === 'done') { el.classList.add('done'); el.textContent = text || '업데이트됨'; }
+    else if (state === 'error') { el.classList.add('error'); el.textContent = text || '오류'; }
+    else { el.textContent = text || '대기중'; }
   }
 
-  function setBody(id, text) {
-    document.getElementById(`body-${id}`).innerHTML = text;
+  // Sets card body text. `text` may come from web-search results (untrusted),
+  // so it's always inserted via textContent — never parsed as HTML.
+  function setBody(id, text, { placeholder = false } = {}) {
+    const el = document.getElementById(`body-${id}`);
+    el.textContent = text;
+    el.classList.toggle('placeholder', placeholder);
   }
 
-  async function fetchCompany(company) {
-    setStatus(company.id, 'loading');
-    setBody(company.id, '<span class="placeholder">검색 중...</span>');
+  function formatRelativeTime(iso) {
+    const diffMin = Math.floor((Date.now() - new Date(iso).getTime()) / 60000);
+    if (diffMin < 1) return '방금 전';
+    if (diffMin < 60) return `${diffMin}분 전`;
+    const diffHour = Math.floor(diffMin / 60);
+    if (diffHour < 24) return `${diffHour}시간 전`;
+    const diffDay = Math.floor(diffHour / 24);
+    return `${diffDay}일 전`;
+  }
 
+  async function loadUpdates() {
     try {
-      const res = await fetch('/api/fetch-company', {
-        method: 'POST',
-        headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({ companyName: company.name, query: company.query }),
+      const res = await fetch(`${SUPABASE_URL}/rest/v1/company_updates?select=*`, {
+        headers: {
+          apikey: SUPABASE_ANON_KEY,
+          Authorization: `Bearer ${SUPABASE_ANON_KEY}`,
+        },
       });
 
-      const data = await res.json();
+      if (!res.ok) throw new Error(`status ${res.status}`);
 
-      if (data.error) throw new Error(data.error);
+      const rows = await res.json();
+      const byId = Object.fromEntries(rows.map(r => [r.company_id, r]));
 
-      const html = (data.text || '정보를 가져오지 못했습니다.')
-        .replace(/\*\*(.*?)\*\*/g, '<strong>$1</strong>')
-        .replace(/^- (.+)$/gm, '• $1')
-        .replace(/\n/g, '<br>');
-
-      setBody(company.id, html);
-      setStatus(company.id, 'done');
-
+      COMPANIES.forEach(c => {
+        const row = byId[c.id];
+        if (row) {
+          setBody(c.id, row.summary);
+          setStatus(c.id, 'done', `업데이트: ${formatRelativeTime(row.fetched_at)}`);
+        } else {
+          setBody(c.id, '곧 업데이트됩니다', { placeholder: true });
+          setStatus(c.id, 'idle', '대기중');
+        }
+      });
     } catch (err) {
-      setBody(company.id, `<span style="color:var(--red)">오류: ${err.message}</span>`);
-      setStatus(company.id, 'error');
+      COMPANIES.forEach(c => {
+        setBody(c.id, '정보를 불러오지 못했습니다.', { placeholder: true });
+        setStatus(c.id, 'error');
+      });
     }
   }
 
-  async function fetchAll() {
-    const btn = document.getElementById('fetchBtn');
-    btn.disabled = true;
-    btn.textContent = '가져오는 중...';
-
-    await Promise.all(COMPANIES.map(c => fetchCompany(c)));
-
-    const now = new Date();
-    document.getElementById('timestamp').textContent =
-      `마지막 업데이트: ${now.toLocaleDateString('ko-KR')} ${now.toLocaleTimeString('ko-KR')}`;
-
-    btn.disabled = false;
-    btn.textContent = '다시 가져오기';
-  }
-
   initCards();
+  loadUpdates();
 </script>
 </body>
 </html>

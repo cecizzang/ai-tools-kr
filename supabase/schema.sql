@@ -173,3 +173,27 @@ grant select, update on public.profiles to authenticated;
 grant select on public.payments to authenticated;
 grant select on public.subscriptions to authenticated;
 
+-- ============================================================
+-- 8. company_updates — daily cron-refreshed AI company summaries.
+--    Written ONLY by the daily Vercel Cron job using the
+--    service_role key, which bypasses RLS. Visitors only ever read.
+-- ============================================================
+create table if not exists public.company_updates (
+  id uuid primary key default gen_random_uuid(),
+  company_id text not null unique,
+  company_name text not null,
+  summary text not null,
+  fetched_at timestamptz not null default now()
+);
+
+alter table public.company_updates enable row level security;
+
+create policy "company_updates: anyone can read"
+  on public.company_updates for select
+  using (true);
+
+grant select on public.company_updates to anon, authenticated;
+
+-- No insert/update/delete policies or grants for anon/authenticated on purpose:
+-- only the service_role key (used by the cron handler) can write here.
+
