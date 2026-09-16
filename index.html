@@ -166,11 +166,32 @@
       min-height: 60px;
     }
 
+    .company-body.clamped {
+      display: -webkit-box;
+      -webkit-line-clamp: 5;
+      -webkit-box-orient: vertical;
+      overflow: hidden;
+    }
+
     .placeholder {
       color: var(--muted);
       font-size: 13px;
       font-family: 'IBM Plex Mono', monospace;
     }
+
+    .expand-btn {
+      display: none;
+      margin: 0 20px 20px;
+      background: none;
+      border: none;
+      padding: 0;
+      color: var(--accent);
+      font-size: 12px;
+      font-family: 'IBM Plex Mono', monospace;
+      cursor: pointer;
+    }
+
+    .expand-btn:hover { text-decoration: underline; }
 
   </style>
 </head>
@@ -246,6 +267,7 @@
           <span class="status-badge" id="status-${c.id}">불러오는 중</span>
         </div>
         <div class="company-body placeholder" id="body-${c.id}"></div>
+        <button class="expand-btn" id="expand-${c.id}" onclick="toggleExpand('${c.id}')">더보기</button>
       </div>
     `).join('');
     COMPANIES.forEach(c => {
@@ -267,8 +289,30 @@
   // so it's always inserted via textContent — never parsed as HTML.
   function setBody(id, text, { placeholder = false } = {}) {
     const el = document.getElementById(`body-${id}`);
+    const btn = document.getElementById(`expand-${id}`);
     el.textContent = text;
     el.classList.toggle('placeholder', placeholder);
+    btn.textContent = '더보기';
+    btn.style.display = 'none';
+
+    if (placeholder) {
+      el.classList.remove('clamped');
+      return;
+    }
+
+    el.classList.add('clamped');
+    requestAnimationFrame(() => {
+      if (el.scrollHeight > el.clientHeight + 1) {
+        btn.style.display = 'block';
+      }
+    });
+  }
+
+  function toggleExpand(id) {
+    const el = document.getElementById(`body-${id}`);
+    const btn = document.getElementById(`expand-${id}`);
+    const stillClamped = el.classList.toggle('clamped');
+    btn.textContent = stillClamped ? '더보기' : '접기';
   }
 
   function formatRelativeTime(iso) {

@@ -196,4 +196,5 @@ grant select on public.company_updates to anon, authenticated;
 
 -- No insert/update/delete policies or grants for anon/authenticated on purpose:
 -- only the service_role key (used by the cron handler) can write here.
+grant select, insert, update on public.company_updates to service_role;
 

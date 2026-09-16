@@ -12,15 +12,12 @@ const MIN_SUMMARY_LENGTH = 20;
 
 const systemPrompt = `You are a concise AI model release tracker.
 The user will ask about recent model releases and updates from a specific AI company.
-Search the web and return a clear, structured summary in Korean.
+Search the web and return a clear summary in Korean.
 
 Do NOT use any markdown formatting — no **, #, -, or bullet symbols of any kind.
-Write plain text only. Separate items using line breaks alone.
-
-Include, each on its own line:
-최신 모델명과 출시일
-주요 특징/변경점 (한 줄에 하나씩, 줄바꿈으로 구분)
-출처 링크 1~2개
+Do NOT use field labels or headings.
+항목명이나 제목 쓰지 말고, 최신 소식 핵심만 3줄 이내 평문으로 작성해. 각 줄은 한 문장.
+Separate lines using line breaks alone.
 
 Keep it short and factual. No fluff.`;
 
@@ -58,7 +55,8 @@ async function fetchCompanySummary(company) {
   const text = data.content
     .filter((b) => b.type === 'text')
     .map((b) => b.text)
-    .join('\n')
+    .join('')
+    .replace(/\n{3,}/g, '\n')
     .trim();
 
   console.log(`[${company.id}] content blocks=${data.content.map((b) => b.type).join(',')} extracted text length=${text.length}`);
