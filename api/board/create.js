@@ -1,7 +1,7 @@
 import crypto from 'node:crypto';
 import { LIMITS, validateLength, hashPassword, hashIp, getClientIp, supabaseFetch, isRateLimited } from './_lib.js';
 
-const CATEGORIES = ['business', 'dev', 'scam', 'free'];
+const CATEGORIES = ['free', 'dev'];
 
 export default async function handler(req, res) {
   if (req.method !== 'POST') {

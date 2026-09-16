@@ -190,7 +190,7 @@
   const SUPABASE_URL = 'https://clpwrmxegqvzzcqcxdsa.supabase.co';
   const SUPABASE_ANON_KEY = 'sb_publishable_PiSGtCuULXpdHlOgYdWK0A_jmTgqIXQ';
   const PAGE_SIZE = 20;
-  const CATEGORY_LABELS = { business: '장사', dev: '개발', scam: '사기제보', free: '자유' };
+  const CATEGORY_LABELS = { free: '일반', dev: '개발' };
 
   function getParams() {
     const p = new URLSearchParams(location.search);
@@ -213,7 +213,7 @@
   function renderTabs(active) {
     const tabsEl = document.getElementById('tabs');
     tabsEl.textContent = '';
-    [['all', '전체'], ['business', '장사'], ['dev', '개발'], ['scam', '사기제보'], ['free', '자유']].forEach(([id, label]) => {
+    [['all', '전체'], ['free', '일반'], ['dev', '개발']].forEach(([id, label]) => {
       const a = document.createElement('a');
       a.className = 'tab' + (id === active ? ' active' : '');
       a.textContent = label;

@@ -15,7 +15,6 @@
       --muted: #6b6b80;
       --accent: #7c6af7;
       --red: #f87171;
-      --yellow: #fbbf24;
     }
 
     * { box-sizing: border-box; margin: 0; padding: 0; }
@@ -122,17 +121,6 @@
 
     select:focus, input:focus, textarea:focus { outline: 1px solid var(--accent); }
 
-    .scam-notice {
-      display: none;
-      background: rgba(251, 191, 36, 0.1);
-      border: 1px solid rgba(251, 191, 36, 0.3);
-      color: var(--yellow);
-      border-radius: 6px;
-      padding: 10px 12px;
-      font-size: 12px;
-      line-height: 1.5;
-    }
-
     .form-error {
       font-size: 12px;
       color: var(--red);
@@ -157,15 +145,9 @@
   <div>
     <label for="category">카테고리</label>
     <select name="category" id="category">
-      <option value="business">장사</option>
+      <option value="free">일반</option>
       <option value="dev">개발</option>
-      <option value="scam">사기제보</option>
-      <option value="free">자유</option>
     </select>
-  </div>
-
-  <div class="scam-notice" id="scamNotice">
-    특정 개인의 실명·연락처 등 개인정보 게시는 금지됩니다. 사실과 다른 내용을 게시할 경우 법적 책임이 따를 수 있습니다.
   </div>
 
   <div class="form-row">
@@ -197,10 +179,6 @@
 </form>
 
 <script>
-  document.getElementById('category').addEventListener('change', (e) => {
-    document.getElementById('scamNotice').style.display = e.target.value === 'scam' ? 'block' : 'none';
-  });
-
   document.getElementById('writeForm').addEventListener('submit', async (e) => {
     e.preventDefault();
     const form = e.target;
