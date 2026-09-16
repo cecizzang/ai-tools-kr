@@ -66,18 +66,17 @@
       flex-wrap: wrap;
     }
 
-    .donate-btn {
+    .nav-link {
       display: inline-flex;
       align-items: center;
       gap: 6px;
-      background: #ffdd00;
-      color: #0d0d0f;
+      background: var(--accent);
+      color: #fff;
       border: none;
       padding: 10px 18px;
       border-radius: 6px;
       font-size: 14px;
       font-weight: 600;
-      cursor: pointer;
       font-family: 'IBM Plex Mono', monospace;
       letter-spacing: 0.2px;
       text-decoration: none;
@@ -85,29 +84,18 @@
       white-space: nowrap;
     }
 
-    .donate-btn:hover { opacity: 0.88; }
-    .donate-btn:active { transform: scale(0.97); }
+    .nav-link:hover { opacity: 0.88; }
+    .nav-link:active { transform: scale(0.97); }
 
-    .nav-link {
-      display: inline-flex;
-      align-items: center;
-      gap: 6px;
-      background: transparent;
-      color: var(--accent);
-      border: 1px solid var(--accent);
-      padding: 9px 17px;
-      border-radius: 6px;
-      font-size: 14px;
-      font-weight: 600;
+    .donate-footer-link {
+      color: var(--muted);
+      font-size: 12px;
       font-family: 'IBM Plex Mono', monospace;
-      letter-spacing: 0.2px;
       text-decoration: none;
-      transition: background 0.15s, transform 0.1s;
-      white-space: nowrap;
+      transition: color 0.15s;
     }
 
-    .nav-link:hover { background: rgba(124, 106, 247, 0.12); }
-    .nav-link:active { transform: scale(0.97); }
+    .donate-footer-link:hover { color: var(--text); }
 
     .companies {
       max-width: 900px;
@@ -203,7 +191,14 @@
     footer {
       max-width: 900px;
       margin: 24px auto 0;
+      display: flex;
+      flex-direction: column;
+      align-items: center;
+      gap: 8px;
       text-align: center;
+    }
+
+    footer p {
       font-size: 11px;
       color: var(--muted);
       font-family: 'IBM Plex Mono', monospace;
@@ -234,20 +229,22 @@
   </div>
   <div class="header-actions">
     <a href="board.html" class="nav-link">게시판</a>
-    <a
-      class="donate-btn"
-      id="donateBtn"
-      href="https://buymeacoffee.com/cecizzang"
-      target="_blank"
-      rel="noopener noreferrer"
-      onclick="logUsage('donate_click')"
-    >☕ 후원하기</a>
   </div>
 </header>
 
 <div class="companies" id="companies"></div>
 
-<footer>회사 소식은 AI가 자동 요약한 정보로 부정확할 수 있습니다</footer>
+<footer>
+  <a
+    class="donate-footer-link"
+    id="donateBtn"
+    href="https://buymeacoffee.com/cecizzang"
+    target="_blank"
+    rel="noopener noreferrer"
+    onclick="logUsage('donate_click')"
+  >☕ 커피 한 잔 후원하기</a>
+  <p>회사 소식은 AI가 자동 요약한 정보로 부정확할 수 있습니다</p>
+</footer>
 
 <script>
   // Publishable key is safe to expose client-side by design (RLS enforces access control server-side).
