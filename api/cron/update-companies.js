@@ -49,16 +49,22 @@ async function fetchCompanySummary(company) {
   const data = await response.json();
 
   if (data.error) {
+    console.error(`[${company.id}] Anthropic API error: status=${response.status} body=${JSON.stringify(data.error)}`);
     throw new Error(data.error.message);
   }
 
+  // Merge every text block (Haiku can emit more than one, interleaved with
+  // web_search tool_use/tool_result blocks) — never just the first one.
   const text = data.content
     .filter((b) => b.type === 'text')
     .map((b) => b.text)
     .join('\n')
     .trim();
 
+  console.log(`[${company.id}] content blocks=${data.content.map((b) => b.type).join(',')} extracted text length=${text.length}`);
+
   if (text.length < MIN_SUMMARY_LENGTH) {
+    console.error(`[${company.id}] summary too short: length=${text.length} text=${JSON.stringify(text)}`);
     throw new Error(`summary too short (${text.length} chars)`);
   }
 
@@ -83,7 +89,9 @@ async function saveCompanyUpdate(company, summary) {
   });
 
   if (!res.ok) {
-    throw new Error(`supabase upsert failed: ${res.status} ${await res.text()}`);
+    const body = await res.text();
+    console.error(`[${company.id}] Supabase upsert failed: status=${res.status} body=${body}`);
+    throw new Error(`supabase upsert failed: ${res.status} ${body}`);
   }
 }
 
