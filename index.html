@@ -88,14 +88,21 @@
     .nav-link:active { transform: scale(0.97); }
 
     .donate-footer-link {
-      color: var(--muted);
-      font-size: 12px;
+      display: inline-block;
+      color: #facc15;
+      opacity: 0.7;
+      font-size: 13px;
       font-family: 'IBM Plex Mono', monospace;
       text-decoration: none;
-      transition: color 0.15s;
+      background: rgba(250, 204, 21, 0.08);
+      padding: 6px 12px;
+      border-radius: 999px;
+      transition: opacity 0.15s;
     }
 
-    .donate-footer-link:hover { color: var(--text); }
+    .donate-footer-link:hover { opacity: 1; }
+    .donate-footer-link:focus { outline: none; }
+    .donate-footer-link:focus-visible { outline: 2px solid #facc15; outline-offset: 2px; }
 
     .companies {
       max-width: 900px;
