@@ -140,6 +140,13 @@
       white-space: nowrap;
     }
 
+    .post-row .count {
+      color: var(--accent);
+      font-family: 'IBM Plex Mono', monospace;
+      font-size: 12px;
+      margin-left: 4px;
+    }
+
     .post-row .meta {
       font-size: 12px;
       color: var(--muted);
@@ -235,6 +242,14 @@
     title.className = 'title';
     title.textContent = row.title;
 
+    const commentCount = row.comments?.[0]?.count || 0;
+    if (commentCount > 0) {
+      const count = document.createElement('span');
+      count.className = 'count';
+      count.textContent = `[${commentCount}]`;
+      title.appendChild(count);
+    }
+
     const meta = document.createElement('span');
     meta.className = 'meta';
     meta.textContent = `${row.nickname} · ${formatRelativeTime(row.created_at)}`;
@@ -285,7 +300,7 @@
     renderTabs(category);
 
     const offset = (page - 1) * PAGE_SIZE;
-    let url = `${SUPABASE_URL}/rest/v1/posts?select=id,category,nickname,title,created_at&order=created_at.desc&limit=${PAGE_SIZE}&offset=${offset}`;
+    let url = `${SUPABASE_URL}/rest/v1/posts?select=id,category,nickname,title,created_at,comments(count)&order=created_at.desc&limit=${PAGE_SIZE}&offset=${offset}`;
     if (category !== 'all') url += `&category=eq.${category}`;
 
     const listEl = document.getElementById('postList');

@@ -89,13 +89,25 @@
     .donate-btn:active { transform: scale(0.97); }
 
     .nav-link {
+      display: inline-flex;
+      align-items: center;
+      gap: 6px;
+      background: transparent;
+      color: var(--accent);
+      border: 1px solid var(--accent);
+      padding: 9px 17px;
+      border-radius: 6px;
+      font-size: 14px;
+      font-weight: 600;
       font-family: 'IBM Plex Mono', monospace;
-      font-size: 13px;
-      color: var(--muted);
+      letter-spacing: 0.2px;
       text-decoration: none;
+      transition: background 0.15s, transform 0.1s;
+      white-space: nowrap;
     }
 
-    .nav-link:hover { color: var(--text); }
+    .nav-link:hover { background: rgba(124, 106, 247, 0.12); }
+    .nav-link:active { transform: scale(0.97); }
 
     .companies {
       max-width: 900px;
@@ -188,6 +200,15 @@
       font-family: 'IBM Plex Mono', monospace;
     }
 
+    footer {
+      max-width: 900px;
+      margin: 24px auto 0;
+      text-align: center;
+      font-size: 11px;
+      color: var(--muted);
+      font-family: 'IBM Plex Mono', monospace;
+    }
+
     .expand-btn {
       display: none;
       margin: 0 20px 20px;
@@ -225,6 +246,8 @@
 </header>
 
 <div class="companies" id="companies"></div>
+
+<footer>회사 소식은 AI가 자동 요약한 정보로 부정확할 수 있습니다</footer>
 
 <script>
   // Publishable key is safe to expose client-side by design (RLS enforces access control server-side).
