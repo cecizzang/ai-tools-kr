@@ -1,0 +1,240 @@
+<!DOCTYPE html>
+<html lang="ko">
+<head>
+  <meta charset="UTF-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+  <title>글쓰기 - 혼AI</title>
+  <style>
+    @import url('https://fonts.googleapis.com/css2?family=IBM+Plex+Mono:wght@400;600&family=Inter:wght@400;500;600;700&display=swap');
+
+    :root {
+      --bg: #0d0d0f;
+      --surface: #141418;
+      --border: #1f1f28;
+      --text: #e8e8f0;
+      --muted: #6b6b80;
+      --accent: #7c6af7;
+      --red: #f87171;
+      --yellow: #fbbf24;
+    }
+
+    * { box-sizing: border-box; margin: 0; padding: 0; }
+
+    body {
+      background: var(--bg);
+      color: var(--text);
+      font-family: 'Inter', sans-serif;
+      min-height: 100vh;
+      padding: 40px 20px;
+    }
+
+    header {
+      max-width: 900px;
+      margin: 0 auto 32px;
+      display: flex;
+      align-items: flex-end;
+      justify-content: space-between;
+      gap: 16px;
+      flex-wrap: wrap;
+    }
+
+    .title-block a { text-decoration: none; color: inherit; }
+
+    .title-block h1 {
+      font-family: 'IBM Plex Mono', monospace;
+      font-size: 22px;
+      font-weight: 600;
+      letter-spacing: -0.5px;
+      color: var(--text);
+    }
+
+    .title-block p {
+      font-size: 13px;
+      color: var(--muted);
+      margin-top: 6px;
+      font-family: 'IBM Plex Mono', monospace;
+    }
+
+    .btn {
+      display: inline-flex;
+      align-items: center;
+      gap: 6px;
+      background: var(--accent);
+      color: #fff;
+      border: none;
+      padding: 10px 18px;
+      border-radius: 6px;
+      font-size: 14px;
+      font-weight: 600;
+      cursor: pointer;
+      font-family: 'IBM Plex Mono', monospace;
+      letter-spacing: 0.2px;
+      text-decoration: none;
+      transition: opacity 0.15s, transform 0.1s;
+      white-space: nowrap;
+    }
+
+    .btn:hover { opacity: 0.88; }
+    .btn:active { transform: scale(0.97); }
+    .btn:disabled { opacity: 0.4; cursor: not-allowed; }
+
+    .btn.secondary {
+      background: var(--surface);
+      color: var(--text);
+      border: 1px solid var(--border);
+    }
+
+    form {
+      max-width: 900px;
+      margin: 0 auto;
+      background: var(--surface);
+      border: 1px solid var(--border);
+      border-radius: 10px;
+      padding: 24px;
+      display: flex;
+      flex-direction: column;
+      gap: 14px;
+    }
+
+    label {
+      font-size: 12px;
+      font-family: 'IBM Plex Mono', monospace;
+      color: var(--muted);
+      display: block;
+      margin-bottom: 6px;
+    }
+
+    .form-row { display: flex; gap: 14px; flex-wrap: wrap; }
+    .form-row > div { flex: 1; min-width: 160px; }
+
+    select, input, textarea {
+      width: 100%;
+      background: var(--bg);
+      border: 1px solid var(--border);
+      border-radius: 6px;
+      color: var(--text);
+      font-family: 'Inter', sans-serif;
+      font-size: 14px;
+      padding: 10px 12px;
+    }
+
+    textarea { resize: vertical; min-height: 200px; font-family: inherit; }
+
+    select:focus, input:focus, textarea:focus { outline: 1px solid var(--accent); }
+
+    .scam-notice {
+      display: none;
+      background: rgba(251, 191, 36, 0.1);
+      border: 1px solid rgba(251, 191, 36, 0.3);
+      color: var(--yellow);
+      border-radius: 6px;
+      padding: 10px 12px;
+      font-size: 12px;
+      line-height: 1.5;
+    }
+
+    .form-error {
+      font-size: 12px;
+      color: var(--red);
+      font-family: 'IBM Plex Mono', monospace;
+      min-height: 16px;
+    }
+
+    .hp-field { position: absolute; left: -9999px; top: -9999px; }
+  </style>
+</head>
+<body>
+
+<header>
+  <div class="title-block">
+    <a href="index.html"><h1>// 혼AI</h1></a>
+    <p>글쓰기</p>
+  </div>
+  <a href="board.html" class="btn secondary">목록</a>
+</header>
+
+<form id="writeForm">
+  <div>
+    <label for="category">카테고리</label>
+    <select name="category" id="category">
+      <option value="business">장사</option>
+      <option value="dev">개발</option>
+      <option value="scam">사기제보</option>
+      <option value="free">자유</option>
+    </select>
+  </div>
+
+  <div class="scam-notice" id="scamNotice">
+    특정 개인의 실명·연락처 등 개인정보 게시는 금지됩니다. 사실과 다른 내용을 게시할 경우 법적 책임이 따를 수 있습니다.
+  </div>
+
+  <div class="form-row">
+    <div>
+      <label for="nickname">닉네임</label>
+      <input name="nickname" id="nickname" maxlength="12" placeholder="2~12자" required />
+    </div>
+    <div>
+      <label for="password">비밀번호</label>
+      <input name="password" id="password" type="password" maxlength="20" placeholder="4~20자 (삭제 시 필요)" required />
+    </div>
+  </div>
+
+  <div>
+    <label for="title">제목</label>
+    <input name="title" id="title" maxlength="60" placeholder="2~60자" required />
+  </div>
+
+  <div>
+    <label for="body">본문</label>
+    <textarea name="body" id="body" maxlength="5000" placeholder="2~5000자" required></textarea>
+  </div>
+
+  <div class="hp-field"><input name="website" tabindex="-1" autocomplete="off" /></div>
+
+  <div class="form-error" id="writeError"></div>
+
+  <button type="submit" class="btn" id="submitBtn">등록</button>
+</form>
+
+<script>
+  document.getElementById('category').addEventListener('change', (e) => {
+    document.getElementById('scamNotice').style.display = e.target.value === 'scam' ? 'block' : 'none';
+  });
+
+  document.getElementById('writeForm').addEventListener('submit', async (e) => {
+    e.preventDefault();
+    const form = e.target;
+    const errEl = document.getElementById('writeError');
+    const submitBtn = document.getElementById('submitBtn');
+    errEl.textContent = '';
+    submitBtn.disabled = true;
+
+    try {
+      const res = await fetch('/api/board/create', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({
+          type: 'post',
+          category: form.category.value,
+          nickname: form.nickname.value,
+          title: form.title.value,
+          body: form.body.value,
+          password: form.password.value,
+          honeypot: form.website.value,
+        }),
+      });
+      const data = await res.json();
+      if (!res.ok) {
+        errEl.textContent = data.error || '등록에 실패했습니다.';
+        submitBtn.disabled = false;
+        return;
+      }
+      location.href = `post.html?id=${encodeURIComponent(data.id)}`;
+    } catch (err) {
+      errEl.textContent = '등록에 실패했습니다.';
+      submitBtn.disabled = false;
+    }
+  });
+</script>
+</body>
+</html>

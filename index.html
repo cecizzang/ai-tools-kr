@@ -88,6 +88,15 @@
     .donate-btn:hover { opacity: 0.88; }
     .donate-btn:active { transform: scale(0.97); }
 
+    .nav-link {
+      font-family: 'IBM Plex Mono', monospace;
+      font-size: 13px;
+      color: var(--muted);
+      text-decoration: none;
+    }
+
+    .nav-link:hover { color: var(--text); }
+
     .companies {
       max-width: 900px;
       margin: 0 auto;
@@ -203,6 +212,7 @@
     <p>Anthropic · OpenAI · Google · Meta · Mistral</p>
   </div>
   <div class="header-actions">
+    <a href="board.html" class="nav-link">게시판</a>
     <a
       class="donate-btn"
       id="donateBtn"
