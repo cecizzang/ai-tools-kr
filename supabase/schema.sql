@@ -299,3 +299,37 @@ alter table public.inquiries enable row level security;
 -- No select/insert/update/delete grants for anon/authenticated on purpose.
 grant select, insert, update, delete on public.inquiries to service_role;
 
+-- ============================================================
+-- 11. tools — AI 툴 모음 디렉토리. Read-only for visitors; every row is
+--    curated by hand in the Supabase Table Editor (which runs as
+--    postgres and bypasses RLS), not through any app code.
+-- ============================================================
+create table if not exists public.tools (
+  id uuid primary key default gen_random_uuid(),
+  name text not null,
+  description text not null,
+  url text not null,
+  affiliate_url text,
+  category text not null check (category in ('chat', 'writing', 'image', 'media', 'dev', 'automation', 'docs')),
+  price text not null check (price in ('free', 'freemium', 'paid')),
+  korean text not null check (korean in ('full', 'partial', 'none')),
+  target text not null check (target in ('dev', 'biz', 'both')),
+  last_checked date,
+  is_published boolean not null default false,
+  sort_order integer not null default 0,
+  created_at timestamptz not null default now()
+);
+
+create index if not exists tools_category_idx on public.tools(category);
+create index if not exists tools_is_published_sort_order_idx on public.tools(is_published, sort_order);
+
+alter table public.tools enable row level security;
+
+create policy "tools: anyone can read published"
+  on public.tools for select
+  using (is_published = true);
+
+-- No insert/update/delete grants or policies for anon/authenticated —
+-- this table is maintained only via the Supabase dashboard.
+grant select on public.tools to anon, authenticated;
+

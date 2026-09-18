@@ -75,6 +75,19 @@
     .btn:hover { opacity: 0.88; }
     .btn:active { transform: scale(0.97); }
 
+    .btn.secondary {
+      background: var(--surface);
+      color: var(--text);
+      border: 1px solid var(--border);
+    }
+
+    .header-actions {
+      display: flex;
+      align-items: center;
+      gap: 10px;
+      flex-wrap: wrap;
+    }
+
     .tabs {
       max-width: 900px;
       margin: 0 auto 20px;
@@ -186,7 +199,10 @@
     <a href="index.html"><h1>혼AI</h1></a>
     <p>게시판</p>
   </div>
-  <a href="write.html" class="btn">글쓰기</a>
+  <div class="header-actions">
+    <a href="tools.html" class="btn secondary">AI 툴</a>
+    <a href="write.html" class="btn">글쓰기</a>
+  </div>
 </header>
 
 <div class="tabs" id="tabs"></div>

@@ -1,0 +1,369 @@
+<!DOCTYPE html>
+<html lang="ko">
+<head>
+  <meta charset="UTF-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+  <title>AI 툴 모음 - 혼AI</title>
+  <style>
+    @import url('https://fonts.googleapis.com/css2?family=IBM+Plex+Mono:wght@400;600&family=Inter:wght@400;500;600;700&display=swap');
+
+    :root {
+      --bg: #0d0d0f;
+      --surface: #141418;
+      --border: #1f1f28;
+      --text: #e8e8f0;
+      --muted: #6b6b80;
+      --accent: #7c6af7;
+      --green: #4ade80;
+      --yellow: #fbbf24;
+      --red: #f87171;
+    }
+
+    * { box-sizing: border-box; margin: 0; padding: 0; }
+
+    body {
+      background: var(--bg);
+      color: var(--text);
+      font-family: 'Inter', sans-serif;
+      min-height: 100vh;
+      padding: 40px 20px;
+    }
+
+    header {
+      max-width: 900px;
+      margin: 0 auto 32px;
+      display: flex;
+      align-items: flex-end;
+      justify-content: space-between;
+      gap: 16px;
+      flex-wrap: wrap;
+    }
+
+    .title-block a { text-decoration: none; color: inherit; }
+
+    .title-block h1 {
+      font-family: 'IBM Plex Mono', monospace;
+      font-size: 22px;
+      font-weight: 600;
+      letter-spacing: -0.5px;
+      color: var(--text);
+    }
+
+    .title-block p {
+      font-size: 13px;
+      color: var(--muted);
+      margin-top: 6px;
+      font-family: 'IBM Plex Mono', monospace;
+    }
+
+    .tabs {
+      max-width: 900px;
+      margin: 0 auto 12px;
+      display: flex;
+      gap: 8px;
+      flex-wrap: wrap;
+    }
+
+    .tabs.category-tabs { margin-bottom: 28px; }
+
+    .tab {
+      padding: 6px 14px;
+      border-radius: 6px;
+      font-size: 13px;
+      font-family: 'IBM Plex Mono', monospace;
+      color: var(--muted);
+      text-decoration: none;
+      background: var(--surface);
+      border: 1px solid var(--border);
+    }
+
+    .tab.active {
+      color: #fff;
+      background: var(--accent);
+      border-color: var(--accent);
+    }
+
+    .tool-section {
+      max-width: 900px;
+      margin: 0 auto 28px;
+    }
+
+    .tool-section-title {
+      font-family: 'IBM Plex Mono', monospace;
+      font-size: 14px;
+      font-weight: 600;
+      color: var(--text);
+      margin-bottom: 12px;
+    }
+
+    .tool-grid {
+      display: grid;
+      grid-template-columns: repeat(auto-fill, minmax(260px, 1fr));
+      gap: 12px;
+    }
+
+    .tool-card {
+      display: flex;
+      flex-direction: column;
+      gap: 8px;
+      min-width: 0;
+      background: var(--surface);
+      border: 1px solid var(--border);
+      border-radius: 10px;
+      padding: 16px;
+      text-decoration: none;
+      color: var(--text);
+    }
+
+    .tool-card:hover { border-color: var(--accent); }
+
+    .tool-card-top {
+      display: flex;
+      align-items: center;
+      justify-content: space-between;
+      gap: 8px;
+      min-width: 0;
+    }
+
+    .tool-name {
+      font-family: 'IBM Plex Mono', monospace;
+      font-size: 14px;
+      font-weight: 600;
+      overflow: hidden;
+      text-overflow: ellipsis;
+      white-space: nowrap;
+      min-width: 0;
+    }
+
+    .tool-desc {
+      font-size: 13px;
+      color: var(--text);
+      opacity: 0.9;
+      line-height: 1.5;
+    }
+
+    .tool-card-bottom {
+      display: flex;
+      align-items: center;
+      justify-content: space-between;
+      gap: 8px;
+      margin-top: auto;
+    }
+
+    .tool-badge {
+      display: inline-flex;
+      align-items: center;
+      flex-shrink: 0;
+      font-size: 11px;
+      font-family: 'IBM Plex Mono', monospace;
+      padding: 3px 8px;
+      border-radius: 4px;
+      color: var(--muted);
+      background: var(--border);
+      white-space: nowrap;
+    }
+
+    .tool-badge.price-free { color: var(--green); background: rgba(74, 222, 128, 0.1); }
+    .tool-badge.price-freemium { color: var(--yellow); background: rgba(251, 191, 36, 0.1); }
+
+    .tool-checked {
+      font-size: 11px;
+      color: var(--muted);
+      font-family: 'IBM Plex Mono', monospace;
+      flex-shrink: 0;
+    }
+
+    .tool-empty {
+      padding: 24px 20px;
+      text-align: center;
+      color: var(--muted);
+      font-family: 'IBM Plex Mono', monospace;
+      font-size: 13px;
+      background: var(--surface);
+      border: 1px solid var(--border);
+      border-radius: 10px;
+    }
+  </style>
+</head>
+<body>
+
+<header>
+  <div class="title-block">
+    <a href="index.html"><h1>혼AI</h1></a>
+    <p>AI 툴 모음</p>
+  </div>
+</header>
+
+<div class="tabs" id="targetToggle"></div>
+<div class="tabs category-tabs" id="categoryTabs"></div>
+<div id="toolSections"></div>
+
+<script>
+  const SUPABASE_URL = 'https://clpwrmxegqvzzcqcxdsa.supabase.co';
+  const SUPABASE_ANON_KEY = 'sb_publishable_PiSGtCuULXpdHlOgYdWK0A_jmTgqIXQ';
+
+  const CATEGORIES = [
+    ['chat', '대화형 AI'],
+    ['writing', '글쓰기·번역'],
+    ['image', '이미지·디자인'],
+    ['media', '영상·음성'],
+    ['dev', '코딩·개발'],
+    ['automation', '자동화·업무'],
+    ['docs', '문서·회의'],
+  ];
+
+  const PRICE_LABELS = { free: '무료', freemium: '부분유료', paid: '유료' };
+  const KOREAN_LABELS = { full: '한국어 지원', partial: '한국어 일부', none: '한국어 미지원' };
+
+  function getParams() {
+    const p = new URLSearchParams(location.search);
+    return {
+      target: p.get('target') || 'all',
+      category: p.get('category') || 'all',
+    };
+  }
+
+  function linkFor(paramName, value) {
+    const params = new URLSearchParams(location.search);
+    if (value === 'all') params.delete(paramName);
+    else params.set(paramName, value);
+    const qs = params.toString();
+    return `tools.html${qs ? '?' + qs : ''}`;
+  }
+
+  function renderToggle(containerId, options, active, paramName) {
+    const el = document.getElementById(containerId);
+    el.textContent = '';
+    options.forEach(([id, label]) => {
+      const a = document.createElement('a');
+      a.className = 'tab' + (id === active ? ' active' : '');
+      a.textContent = label;
+      a.href = linkFor(paramName, id);
+      el.appendChild(a);
+    });
+  }
+
+  function matchesTarget(tool, target) {
+    if (target === 'all') return true;
+    return tool.target === target || tool.target === 'both';
+  }
+
+  function formatCheckedDate(dateStr) {
+    if (!dateStr) return null;
+    const [y, m, d] = dateStr.split('-');
+    return `${y}.${m}.${d} 확인`;
+  }
+
+  function buildCard(tool) {
+    const a = document.createElement('a');
+    a.className = 'tool-card';
+    a.href = tool.affiliate_url || tool.url;
+    a.target = '_blank';
+    a.rel = tool.affiliate_url ? 'noopener noreferrer sponsored' : 'noopener noreferrer';
+
+    const top = document.createElement('div');
+    top.className = 'tool-card-top';
+
+    const name = document.createElement('span');
+    name.className = 'tool-name';
+    name.textContent = tool.name;
+
+    const priceBadge = document.createElement('span');
+    priceBadge.className = `tool-badge price-${tool.price}`;
+    priceBadge.textContent = PRICE_LABELS[tool.price] || tool.price;
+
+    top.appendChild(name);
+    top.appendChild(priceBadge);
+
+    const desc = document.createElement('p');
+    desc.className = 'tool-desc';
+    desc.textContent = tool.description;
+
+    const bottom = document.createElement('div');
+    bottom.className = 'tool-card-bottom';
+
+    const koreanBadge = document.createElement('span');
+    koreanBadge.className = 'tool-badge';
+    koreanBadge.textContent = KOREAN_LABELS[tool.korean] || tool.korean;
+    bottom.appendChild(koreanBadge);
+
+    const checked = formatCheckedDate(tool.last_checked);
+    if (checked) {
+      const checkedEl = document.createElement('span');
+      checkedEl.className = 'tool-checked';
+      checkedEl.textContent = checked;
+      bottom.appendChild(checkedEl);
+    }
+
+    a.appendChild(top);
+    a.appendChild(desc);
+    a.appendChild(bottom);
+    return a;
+  }
+
+  function buildSection(label, tools, showHeading) {
+    const section = document.createElement('section');
+    section.className = 'tool-section';
+
+    if (showHeading) {
+      const h = document.createElement('h2');
+      h.className = 'tool-section-title';
+      h.textContent = label;
+      section.appendChild(h);
+    }
+
+    if (tools.length === 0) {
+      const empty = document.createElement('div');
+      empty.className = 'tool-empty';
+      empty.textContent = '준비 중';
+      section.appendChild(empty);
+    } else {
+      const grid = document.createElement('div');
+      grid.className = 'tool-grid';
+      tools.forEach((t) => grid.appendChild(buildCard(t)));
+      section.appendChild(grid);
+    }
+
+    return section;
+  }
+
+  async function loadTools() {
+    const { target, category } = getParams();
+    renderToggle('targetToggle', [['all', '전체'], ['dev', '개발자'], ['biz', '사업자']], target, 'target');
+    renderToggle('categoryTabs', [['all', '전체'], ...CATEGORIES], category, 'category');
+
+    const container = document.getElementById('toolSections');
+    container.textContent = '';
+
+    try {
+      const res = await fetch(
+        `${SUPABASE_URL}/rest/v1/tools?select=id,name,description,url,affiliate_url,category,price,korean,target,last_checked&order=sort_order.asc,created_at.desc`,
+        {
+          headers: {
+            apikey: SUPABASE_ANON_KEY,
+            Authorization: `Bearer ${SUPABASE_ANON_KEY}`,
+          },
+        }
+      );
+      if (!res.ok) throw new Error(`status ${res.status}`);
+
+      const rows = await res.json();
+      const filtered = rows.filter((t) => matchesTarget(t, target));
+      const categoriesToShow = category === 'all' ? CATEGORIES : CATEGORIES.filter(([id]) => id === category);
+
+      categoriesToShow.forEach(([id, label]) => {
+        const tools = filtered.filter((t) => t.category === id);
+        container.appendChild(buildSection(label, tools, category === 'all'));
+      });
+    } catch (err) {
+      const empty = document.createElement('div');
+      empty.className = 'tool-empty';
+      empty.textContent = '툴 목록을 불러오지 못했습니다.';
+      container.appendChild(empty);
+    }
+  }
+
+  loadTools();
+</script>
+</body>
+</html>

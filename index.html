@@ -212,6 +212,49 @@
 
     .board-more-link:hover { text-decoration: underline; }
 
+    .tools-preview {
+      max-width: 900px;
+      margin: 0 auto 40px;
+    }
+
+    .tools-preview-head {
+      display: flex;
+      align-items: baseline;
+      justify-content: space-between;
+      gap: 12px;
+      flex-wrap: wrap;
+      margin-bottom: 12px;
+    }
+
+    .tools-preview-chips {
+      display: flex;
+      flex-wrap: wrap;
+      gap: 8px;
+    }
+
+    .tools-chip {
+      display: inline-flex;
+      align-items: center;
+      gap: 8px;
+      padding: 8px 14px;
+      border-radius: 999px;
+      background: var(--surface);
+      border: 1px solid var(--border);
+      color: var(--text);
+      font-size: 13px;
+      font-family: 'IBM Plex Mono', monospace;
+      text-decoration: none;
+    }
+
+    .tools-chip:hover { border-color: var(--accent); color: var(--accent); }
+
+    .tools-chip-dot {
+      width: 7px;
+      height: 7px;
+      border-radius: 50%;
+      flex-shrink: 0;
+    }
+
     .company-card {
       background: var(--surface);
       border: 1px solid var(--border);
@@ -336,6 +379,7 @@
   </div>
   <div class="header-actions">
     <a href="board.html" class="nav-link">게시판</a>
+    <a href="tools.html" class="nav-link secondary">AI 툴</a>
     <a href="contact.html" class="nav-link secondary">문의사항</a>
   </div>
 </header>
@@ -344,6 +388,22 @@
   <h2 class="section-title">게시판 최신글</h2>
   <div class="board-preview-list" id="boardPreviewList"></div>
   <a href="board.html" class="board-more-link">게시판 더보기 →</a>
+</section>
+
+<section class="tools-preview">
+  <div class="tools-preview-head">
+    <h2 class="section-title">AI 툴 모음</h2>
+    <a href="tools.html" class="board-more-link">전체 보기 →</a>
+  </div>
+  <div class="tools-preview-chips">
+    <a href="tools.html?category=chat" class="tools-chip"><span class="tools-chip-dot" style="background:#7c6af7"></span>대화형 AI</a>
+    <a href="tools.html?category=writing" class="tools-chip"><span class="tools-chip-dot" style="background:#10b981"></span>글쓰기·번역</a>
+    <a href="tools.html?category=image" class="tools-chip"><span class="tools-chip-dot" style="background:#f59e0b"></span>이미지·디자인</a>
+    <a href="tools.html?category=media" class="tools-chip"><span class="tools-chip-dot" style="background:#ec4899"></span>영상·음성</a>
+    <a href="tools.html?category=dev" class="tools-chip"><span class="tools-chip-dot" style="background:#3b82f6"></span>코딩·개발</a>
+    <a href="tools.html?category=automation" class="tools-chip"><span class="tools-chip-dot" style="background:#fbbf24"></span>자동화·업무</a>
+    <a href="tools.html?category=docs" class="tools-chip"><span class="tools-chip-dot" style="background:#94a3b8"></span>문서·회의</a>
+  </div>
 </section>
 
 <div class="companies" id="companies"></div>
