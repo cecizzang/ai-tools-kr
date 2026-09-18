@@ -1,18 +1,26 @@
 export const config = { maxDuration: 60 };
 
 const COMPANIES = [
-  { id: 'anthropic', name: 'Anthropic', query: 'Anthropic Claude latest model release update 2026' },
-  { id: 'openai',    name: 'OpenAI',    query: 'OpenAI GPT latest model release update 2026' },
-  { id: 'google',    name: 'Google DeepMind', query: 'Google Gemini latest model release update 2026' },
-  { id: 'meta',      name: 'Meta AI',   query: 'Meta Llama latest model release update 2026' },
-  { id: 'mistral',   name: 'Mistral AI', query: 'Mistral AI latest model release update 2026' },
+  { id: 'anthropic', name: 'Anthropic', queryBase: 'Anthropic Claude latest model release update' },
+  { id: 'openai',    name: 'OpenAI',    queryBase: 'OpenAI GPT latest model release update' },
+  { id: 'google',    name: 'Google DeepMind', queryBase: 'Google Gemini latest model release update' },
+  { id: 'meta',      name: 'Meta AI',   queryBase: 'Meta Llama latest model release update' },
+  { id: 'mistral',   name: 'Mistral AI', queryBase: 'Mistral AI latest model release update' },
 ];
 
 const MIN_SUMMARY_LENGTH = 20;
 
-const systemPrompt = `You are a concise AI model release tracker.
+function buildSystemPrompt(todayKR) {
+  return `You are a concise AI model release tracker.
+오늘 날짜는 ${todayKR}입니다.
 The user will ask about recent model releases and updates from a specific AI company.
 Search the web and return a clear summary in Korean.
+
+최근 30일 이내에 나온 소식을 우선적으로 찾아. 검색 결과에 날짜가 다른 여러 소식이 섞여 있으면,
+그중 가장 최근 날짜를 기준으로 "지금 시점에 가장 최신인 모델/버전"이 무엇인지 다시 한번 확인한 뒤 답변해.
+더 최신 버전이 이미 나왔는데 오래된 버전을 최신이라고 쓰지 마.
+
+문장마다 그 소식의 출처 날짜를 확인할 수 있으면 문장 끝에 (M/D) 형식으로 표시해. 날짜를 확인할 수 없으면 표시하지 마.
 
 Do NOT use any markdown formatting — no **, #, -, or bullet symbols of any kind.
 Do NOT use field labels or headings.
@@ -20,8 +28,14 @@ Do NOT use field labels or headings.
 Separate lines using line breaks alone.
 
 Keep it short and factual. No fluff.`;
+}
 
 async function fetchCompanySummary(company) {
+  const now = new Date();
+  const todayKR = now.toLocaleDateString('ko-KR', { year: 'numeric', month: 'long', day: 'numeric' });
+  const yearMonth = `${now.getFullYear()}-${String(now.getMonth() + 1).padStart(2, '0')}`;
+  const query = `${company.queryBase} ${yearMonth}`;
+
   const response = await fetch('https://api.anthropic.com/v1/messages', {
     method: 'POST',
     headers: {
@@ -32,12 +46,12 @@ async function fetchCompanySummary(company) {
     body: JSON.stringify({
       model: 'claude-haiku-4-5-20251001',
       max_tokens: 1000,
-      system: systemPrompt,
-      tools: [{ type: 'web_search_20250305', name: 'web_search', max_uses: 1 }],
+      system: buildSystemPrompt(todayKR),
+      tools: [{ type: 'web_search_20250305', name: 'web_search', max_uses: 3 }],
       messages: [
         {
           role: 'user',
-          content: `${company.name}의 최신 AI 모델 릴리즈와 업데이트 정보를 알려줘. 쿼리: ${company.query}`,
+          content: `${company.name}의 최신 AI 모델 릴리즈와 업데이트 정보를 알려줘. 쿼리: ${query}`,
         },
       ],
     }),
