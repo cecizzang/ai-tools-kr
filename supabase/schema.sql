@@ -260,3 +260,42 @@ grant select (id, post_id, nickname, body, created_at) on public.comments to ano
 grant select, insert, update, delete on public.posts to service_role;
 grant select, insert, update, delete on public.comments to service_role;
 
+-- notice category — pinned announcements, posted only via the Supabase
+-- dashboard (service_role), never by anonymous visitors.
+alter table public.posts drop constraint if exists posts_category_check;
+alter table public.posts add constraint posts_category_check
+  check (category in ('business', 'dev', 'scam', 'free', 'notice'));
+
+-- anon/authenticated have NO insert grant on public.posts at all today —
+-- every write goes through api/board/*.js with the service_role key, which
+-- bypasses RLS entirely — so this policy is defense-in-depth, not the
+-- primary gate. The primary gate is api/board/create.js's CATEGORIES
+-- allowlist, which already omits 'notice'. This policy only starts doing
+-- real work if an INSERT grant to anon is ever added later.
+create policy "posts: anon cannot insert notice"
+  on public.posts for insert
+  to anon, authenticated
+  with check (category <> 'notice');
+
+-- ============================================================
+-- 10. inquiries — /contact form submissions ("문의사항").
+--    Same model as posts/comments: written ONLY through
+--    api/contact/send.js using the service_role key (rate limiting +
+--    honeypot happen there); anon/authenticated get no grants at all,
+--    since inquiries are private and never rendered on the site.
+-- ============================================================
+create table if not exists public.inquiries (
+  id uuid primary key default gen_random_uuid(),
+  email text,
+  message text not null,
+  ip_hash text not null,
+  created_at timestamptz not null default now()
+);
+
+create index if not exists inquiries_ip_hash_created_at_idx on public.inquiries(ip_hash, created_at desc);
+
+alter table public.inquiries enable row level security;
+
+-- No select/insert/update/delete grants for anon/authenticated on purpose.
+grant select, insert, update, delete on public.inquiries to service_role;
+

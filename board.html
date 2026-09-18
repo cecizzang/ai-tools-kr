@@ -183,7 +183,7 @@
 
 <header>
   <div class="title-block">
-    <a href="index.html"><h1>// 혼AI</h1></a>
+    <a href="index.html"><h1>혼AI</h1></a>
     <p>게시판</p>
   </div>
   <a href="write.html" class="btn">글쓰기</a>
@@ -197,7 +197,7 @@
   const SUPABASE_URL = 'https://clpwrmxegqvzzcqcxdsa.supabase.co';
   const SUPABASE_ANON_KEY = 'sb_publishable_PiSGtCuULXpdHlOgYdWK0A_jmTgqIXQ';
   const PAGE_SIZE = 20;
-  const CATEGORY_LABELS = { free: '일반', dev: '개발' };
+  const CATEGORY_LABELS = { notice: '공지사항', free: '일반', dev: '개발' };
 
   function getParams() {
     const p = new URLSearchParams(location.search);
@@ -220,13 +220,19 @@
   function renderTabs(active) {
     const tabsEl = document.getElementById('tabs');
     tabsEl.textContent = '';
-    [['all', '전체'], ['free', '일반'], ['dev', '개발']].forEach(([id, label]) => {
+    [['all', '전체'], ['notice', '공지사항'], ['free', '일반'], ['dev', '개발']].forEach(([id, label]) => {
       const a = document.createElement('a');
       a.className = 'tab' + (id === active ? ' active' : '');
       a.textContent = label;
       a.href = id === 'all' ? 'board.html' : `board.html?category=${id}`;
       tabsEl.appendChild(a);
     });
+
+    const contact = document.createElement('a');
+    contact.className = 'tab';
+    contact.textContent = '문의사항';
+    contact.href = 'contact.html';
+    tabsEl.appendChild(contact);
   }
 
   function buildRow(row) {
@@ -242,7 +248,7 @@
     title.className = 'title';
     title.textContent = row.title;
 
-    const commentCount = row.comments?.[0]?.count || 0;
+    const commentCount = row.comments?.length || 0;
     if (commentCount > 0) {
       const count = document.createElement('span');
       count.className = 'count';
@@ -295,32 +301,43 @@
     }
   }
 
+  async function fetchPosts(url) {
+    const res = await fetch(url, {
+      headers: {
+        apikey: SUPABASE_ANON_KEY,
+        Authorization: `Bearer ${SUPABASE_ANON_KEY}`,
+        Prefer: 'count=exact',
+      },
+    });
+    if (!res.ok) throw new Error(`status ${res.status}`);
+    const rows = await res.json();
+    const range = res.headers.get('content-range');
+    const total = range ? parseInt(range.split('/')[1], 10) : rows.length;
+    return { rows, total };
+  }
+
   async function loadPosts() {
     const { category, page } = getParams();
     renderTabs(category);
 
     const offset = (page - 1) * PAGE_SIZE;
-    let url = `${SUPABASE_URL}/rest/v1/posts?select=id,category,nickname,title,created_at,comments(count)&order=created_at.desc&limit=${PAGE_SIZE}&offset=${offset}`;
-    if (category !== 'all') url += `&category=eq.${category}`;
+    const select = 'select=id,category,nickname,title,created_at,comments(id)';
+    let url = `${SUPABASE_URL}/rest/v1/posts?${select}&order=created_at.desc&limit=${PAGE_SIZE}&offset=${offset}`;
+    url += category === 'all' ? '&category=neq.notice' : `&category=eq.${category}`;
 
     const listEl = document.getElementById('postList');
     listEl.textContent = '';
 
     try {
-      const res = await fetch(url, {
-        headers: {
-          apikey: SUPABASE_ANON_KEY,
-          Authorization: `Bearer ${SUPABASE_ANON_KEY}`,
-          Prefer: 'count=exact',
-        },
-      });
-      if (!res.ok) throw new Error(`status ${res.status}`);
+      if (category === 'all' && page === 1) {
+        const noticeUrl = `${SUPABASE_URL}/rest/v1/posts?${select}&category=eq.notice&order=created_at.desc&limit=5`;
+        const { rows: noticeRows } = await fetchPosts(noticeUrl);
+        noticeRows.forEach((row) => listEl.appendChild(buildRow(row)));
+      }
 
-      const rows = await res.json();
-      const range = res.headers.get('content-range');
-      const total = range ? parseInt(range.split('/')[1], 10) : rows.length;
+      const { rows, total } = await fetchPosts(url);
 
-      if (rows.length === 0) {
+      if (rows.length === 0 && listEl.children.length === 0) {
         const empty = document.createElement('div');
         empty.className = 'empty';
         empty.textContent = '아직 게시글이 없습니다.';
@@ -331,6 +348,7 @@
 
       renderPagination(page, total, category);
     } catch (err) {
+      listEl.textContent = '';
       const empty = document.createElement('div');
       empty.className = 'empty';
       empty.textContent = '목록을 불러오지 못했습니다.';

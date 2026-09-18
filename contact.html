@@ -1,0 +1,221 @@
+<!DOCTYPE html>
+<html lang="ko">
+<head>
+  <meta charset="UTF-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+  <title>문의사항 - 혼AI</title>
+  <style>
+    @import url('https://fonts.googleapis.com/css2?family=IBM+Plex+Mono:wght@400;600&family=Inter:wght@400;500;600;700&display=swap');
+
+    :root {
+      --bg: #0d0d0f;
+      --surface: #141418;
+      --border: #1f1f28;
+      --text: #e8e8f0;
+      --muted: #6b6b80;
+      --accent: #7c6af7;
+      --red: #f87171;
+      --green: #4ade80;
+    }
+
+    * { box-sizing: border-box; margin: 0; padding: 0; }
+
+    body {
+      background: var(--bg);
+      color: var(--text);
+      font-family: 'Inter', sans-serif;
+      min-height: 100vh;
+      padding: 40px 20px;
+    }
+
+    header {
+      max-width: 900px;
+      margin: 0 auto 32px;
+      display: flex;
+      align-items: flex-end;
+      justify-content: space-between;
+      gap: 16px;
+      flex-wrap: wrap;
+    }
+
+    .title-block a { text-decoration: none; color: inherit; }
+
+    .title-block h1 {
+      font-family: 'IBM Plex Mono', monospace;
+      font-size: 22px;
+      font-weight: 600;
+      letter-spacing: -0.5px;
+      color: var(--text);
+    }
+
+    .title-block p {
+      font-size: 13px;
+      color: var(--muted);
+      margin-top: 6px;
+      font-family: 'IBM Plex Mono', monospace;
+    }
+
+    .btn {
+      display: inline-flex;
+      align-items: center;
+      gap: 6px;
+      background: var(--accent);
+      color: #fff;
+      border: none;
+      padding: 10px 18px;
+      border-radius: 6px;
+      font-size: 14px;
+      font-weight: 600;
+      cursor: pointer;
+      font-family: 'IBM Plex Mono', monospace;
+      letter-spacing: 0.2px;
+      text-decoration: none;
+      transition: opacity 0.15s, transform 0.1s;
+      white-space: nowrap;
+    }
+
+    .btn:hover { opacity: 0.88; }
+    .btn:active { transform: scale(0.97); }
+    .btn:disabled { opacity: 0.4; cursor: not-allowed; }
+
+    .btn.secondary {
+      background: var(--surface);
+      color: var(--text);
+      border: 1px solid var(--border);
+    }
+
+    form {
+      max-width: 900px;
+      margin: 0 auto;
+      background: var(--surface);
+      border: 1px solid var(--border);
+      border-radius: 10px;
+      padding: 24px;
+      display: flex;
+      flex-direction: column;
+      gap: 14px;
+    }
+
+    .intro {
+      max-width: 900px;
+      margin: 0 auto 20px;
+      font-size: 13px;
+      color: var(--muted);
+      font-family: 'IBM Plex Mono', monospace;
+      line-height: 1.6;
+    }
+
+    label {
+      font-size: 12px;
+      font-family: 'IBM Plex Mono', monospace;
+      color: var(--muted);
+      display: block;
+      margin-bottom: 6px;
+    }
+
+    input, textarea {
+      width: 100%;
+      background: var(--bg);
+      border: 1px solid var(--border);
+      border-radius: 6px;
+      color: var(--text);
+      font-family: 'Inter', sans-serif;
+      font-size: 14px;
+      padding: 10px 12px;
+    }
+
+    textarea { resize: vertical; min-height: 180px; font-family: inherit; }
+
+    input:focus, textarea:focus { outline: 1px solid var(--accent); }
+
+    .form-error {
+      font-size: 12px;
+      color: var(--red);
+      font-family: 'IBM Plex Mono', monospace;
+      min-height: 16px;
+    }
+
+    .form-success {
+      max-width: 900px;
+      margin: 0 auto;
+      background: var(--surface);
+      border: 1px solid var(--border);
+      border-radius: 10px;
+      padding: 40px 24px;
+      text-align: center;
+      font-family: 'IBM Plex Mono', monospace;
+      color: var(--green);
+      font-size: 14px;
+      display: none;
+    }
+
+    .hp-field { position: absolute; left: -9999px; top: -9999px; }
+  </style>
+</head>
+<body>
+
+<header>
+  <div class="title-block">
+    <a href="index.html"><h1>혼AI</h1></a>
+    <p>문의사항</p>
+  </div>
+  <a href="board.html" class="btn secondary">게시판</a>
+</header>
+
+<p class="intro">버그 제보, 제휴 문의, 기타 하고 싶은 말을 남겨주세요. 답변이 필요하면 이메일을 남겨주세요.</p>
+
+<form id="contactForm">
+  <div>
+    <label for="email">이메일 (선택, 답변 받을 주소)</label>
+    <input name="email" id="email" type="email" maxlength="254" placeholder="you@example.com" />
+  </div>
+
+  <div>
+    <label for="message">문의 내용</label>
+    <textarea name="message" id="message" maxlength="2000" placeholder="5~2000자" required></textarea>
+  </div>
+
+  <div class="hp-field"><input name="website" tabindex="-1" autocomplete="off" /></div>
+
+  <div class="form-error" id="contactError"></div>
+
+  <button type="submit" class="btn" id="submitBtn" style="align-self: flex-end;">보내기</button>
+</form>
+
+<div class="form-success" id="contactSuccess">문의가 접수되었습니다. 확인 후 답변드리겠습니다.</div>
+
+<script>
+  document.getElementById('contactForm').addEventListener('submit', async (e) => {
+    e.preventDefault();
+    const form = e.target;
+    const errEl = document.getElementById('contactError');
+    const submitBtn = document.getElementById('submitBtn');
+    errEl.textContent = '';
+    submitBtn.disabled = true;
+
+    try {
+      const res = await fetch('/api/contact/send', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({
+          email: form.email.value,
+          message: form.message.value,
+          honeypot: form.website.value,
+        }),
+      });
+      const data = await res.json();
+      if (!res.ok) {
+        errEl.textContent = data.error || '전송에 실패했습니다.';
+        submitBtn.disabled = false;
+        return;
+      }
+      form.style.display = 'none';
+      document.getElementById('contactSuccess').style.display = 'block';
+    } catch (err) {
+      errEl.textContent = '전송에 실패했습니다.';
+      submitBtn.disabled = false;
+    }
+  });
+</script>
+</body>
+</html>

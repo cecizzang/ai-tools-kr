@@ -59,3 +59,22 @@ grant select (id, post_id, nickname, body, created_at) on public.comments to ano
 -- this is the exact grant that was missing before and caused the earlier 403.
 grant select, insert, update, delete on public.posts to service_role;
 grant select, insert, update, delete on public.comments to service_role;
+
+-- ============================================================
+-- notice category — pinned announcements, posted only via the
+-- Supabase dashboard (service_role), never by anonymous visitors.
+-- ============================================================
+alter table public.posts drop constraint if exists posts_category_check;
+alter table public.posts add constraint posts_category_check
+  check (category in ('business', 'dev', 'scam', 'free', 'notice'));
+
+-- anon/authenticated have NO insert grant on public.posts at all today —
+-- every write goes through api/board/*.js with the service_role key, which
+-- bypasses RLS entirely — so this policy is defense-in-depth, not the
+-- primary gate. The primary gate is api/board/create.js's CATEGORIES
+-- allowlist, which already omits 'notice'. This policy only starts doing
+-- real work if an INSERT grant to anon is ever added later.
+create policy "posts: anon cannot insert notice"
+  on public.posts for insert
+  to anon, authenticated
+  with check (category <> 'notice');
