@@ -381,8 +381,13 @@
   const imageInput = document.getElementById('imageInput');
   document.getElementById('addImageBtn').addEventListener('click', () => imageInput.click());
   imageInput.addEventListener('change', (e) => {
-    const files = e.target.files;
-    e.target.value = ''; // reset so picking the same file again after removing it still fires 'change'
+    // Snapshot into a plain array BEFORE touching e.target.value: input.files is
+    // not a static copy, it's live against the input's current selection, so
+    // clearing value first (to let the same file be reselected later) would
+    // empty this reference out from under us before addFiles ever reads it —
+    // that was the bug (dialog closes, nothing happens, no error either).
+    const files = Array.from(e.target.files || []);
+    e.target.value = '';
     addFiles(files);
   });
 
