@@ -1,6 +1,7 @@
-import { verifyPassword, supabaseFetch } from './_lib.js';
+import { verifyPassword, supabaseFetch, supabaseStorageDelete, storagePathFromPublicUrl } from './_lib.js';
 
 const TABLES = { post: 'posts', comment: 'comments' };
+const IMAGE_BUCKET = 'post-images';
 
 export default async function handler(req, res) {
   if (req.method !== 'POST') {
@@ -16,19 +17,21 @@ export default async function handler(req, res) {
 
   const isAdmin = Boolean(adminSecret) && adminSecret === process.env.ADMIN_SECRET;
 
+  // Posts also need their image_urls fetched here (regardless of admin/password
+  // path) so the storage objects can be cleaned up after the row is gone.
+  const selectCols = type === 'post' ? 'password_hash,image_urls' : 'password_hash';
+  const lookupRes = await supabaseFetch(`/rest/v1/${table}?id=eq.${encodeURIComponent(id)}&select=${selectCols}`);
+  if (!lookupRes.ok) {
+    return res.status(500).json({ error: `조회 실패: ${lookupRes.status}` });
+  }
+  const [row] = await lookupRes.json();
+  if (!row) {
+    return res.status(404).json({ error: '게시물을 찾을 수 없습니다' });
+  }
+
   if (!isAdmin) {
     if (typeof password !== 'string' || password.length === 0) {
       return res.status(400).json({ error: '비밀번호가 필요합니다' });
-    }
-
-    const lookupRes = await supabaseFetch(`/rest/v1/${table}?id=eq.${encodeURIComponent(id)}&select=password_hash`);
-    if (!lookupRes.ok) {
-      return res.status(500).json({ error: `조회 실패: ${lookupRes.status}` });
-    }
-
-    const [row] = await lookupRes.json();
-    if (!row) {
-      return res.status(404).json({ error: '게시물을 찾을 수 없습니다' });
     }
     if (!verifyPassword(password, row.password_hash)) {
       return res.status(403).json({ error: '비밀번호가 일치하지 않습니다' });
@@ -41,6 +44,20 @@ export default async function handler(req, res) {
 
   if (!deleteRes.ok) {
     return res.status(500).json({ error: `삭제 실패: ${deleteRes.status}` });
+  }
+
+  // Best-effort: the post row is already gone at this point either way, so a storage
+  // hiccup here shouldn't turn into a user-facing delete failure — it just leaves an
+  // orphaned (unreferenced, invisible) object in the bucket.
+  if (type === 'post' && Array.isArray(row.image_urls) && row.image_urls.length > 0) {
+    const paths = row.image_urls
+      .map((url) => storagePathFromPublicUrl(IMAGE_BUCKET, url))
+      .filter(Boolean);
+    try {
+      await supabaseStorageDelete(IMAGE_BUCKET, paths);
+    } catch {
+      // ignore — see comment above
+    }
   }
 
   return res.status(200).json({ ok: true });

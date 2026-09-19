@@ -226,19 +226,59 @@
     }
 
     .hp-field { position: absolute; left: -9999px; top: -9999px; }
+
+    .post-images {
+      display: flex;
+      flex-wrap: wrap;
+      gap: 10px;
+      margin-bottom: 20px;
+    }
+
+    .post-images img {
+      width: 140px;
+      height: 140px;
+      object-fit: cover;
+      border-radius: 8px;
+      border: 1px solid var(--border);
+      cursor: zoom-in;
+    }
+
+    .lightbox {
+      display: none;
+      position: fixed;
+      inset: 0;
+      background: rgba(0, 0, 0, 0.85);
+      z-index: 100;
+      align-items: center;
+      justify-content: center;
+      padding: 24px;
+      cursor: zoom-out;
+    }
+
+    .lightbox.open { display: flex; }
+
+    .lightbox img {
+      max-width: 100%;
+      max-height: 100%;
+      border-radius: 6px;
+    }
   </style>
 </head>
 <body>
 
 <header>
   <div class="title-block">
-    <a href="index.html"><h1>// 혼AI</h1></a>
+    <a href="index.html"><h1>혼AI</h1></a>
     <p>게시판</p>
   </div>
   <a href="board.html" class="btn secondary">목록</a>
 </header>
 
 <div id="postDetail" class="card"></div>
+
+<div class="lightbox" id="lightbox">
+  <img id="lightboxImg" src="" alt="" />
+</div>
 
 <div id="commentsSection">
   <h2>댓글</h2>
@@ -308,15 +348,43 @@
     wrap.appendChild(titleEl);
     wrap.appendChild(metaEl);
     wrap.appendChild(bodyEl);
+
+    if (Array.isArray(post.image_urls) && post.image_urls.length > 0) {
+      const gallery = document.createElement('div');
+      gallery.className = 'post-images';
+      post.image_urls.forEach((url) => {
+        const img = document.createElement('img');
+        img.src = url;
+        img.alt = post.title;
+        img.loading = 'lazy';
+        img.onclick = () => openLightbox(url);
+        gallery.appendChild(img);
+      });
+      wrap.appendChild(gallery);
+    }
+
     wrap.appendChild(delBtn);
   }
+
+  function openLightbox(url) {
+    document.getElementById('lightboxImg').src = url;
+    document.getElementById('lightbox').classList.add('open');
+  }
+
+  function closeLightbox() {
+    document.getElementById('lightbox').classList.remove('open');
+    document.getElementById('lightboxImg').src = '';
+  }
+
+  document.getElementById('lightbox').addEventListener('click', closeLightbox);
+  document.addEventListener('keydown', (e) => { if (e.key === 'Escape') closeLightbox(); });
 
   async function loadPost() {
     if (!POST_ID) { showNotFound(); return; }
 
     try {
       const res = await fetch(
-        `${SUPABASE_URL}/rest/v1/posts?id=eq.${encodeURIComponent(POST_ID)}&select=id,category,nickname,title,body,created_at`,
+        `${SUPABASE_URL}/rest/v1/posts?id=eq.${encodeURIComponent(POST_ID)}&select=id,category,nickname,title,body,image_urls,created_at`,
         { headers: { apikey: SUPABASE_ANON_KEY, Authorization: `Bearer ${SUPABASE_ANON_KEY}` } }
       );
       if (!res.ok) throw new Error(`status ${res.status}`);

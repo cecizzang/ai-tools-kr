@@ -78,3 +78,37 @@ create policy "posts: anon cannot insert notice"
   on public.posts for insert
   to anon, authenticated
   with check (category <> 'notice');
+
+-- ============================================================
+-- post images — up to 4 per post, uploaded only via
+-- api/board/create.js (service_role), stored as full public
+-- URLs pointing into the "post-images" Storage bucket.
+-- ============================================================
+alter table public.posts add column if not exists image_urls text[] not null default '{}';
+
+alter table public.posts drop constraint if exists posts_image_urls_max4;
+alter table public.posts add constraint posts_image_urls_max4
+  check (array_length(image_urls, 1) is null or array_length(image_urls, 1) <= 4);
+
+-- Column-level grant is additive — this does not touch the columns already
+-- granted above, it just adds image_urls to what anon/authenticated may read.
+grant select (image_urls) on public.posts to anon, authenticated;
+
+-- Bucket: public read (served straight from the CDN via the public object URL,
+-- no auth needed), all writes/deletes go through api/board/*.js with service_role,
+-- which bypasses Storage RLS entirely — same trust model as the posts/comments
+-- tables above.
+insert into storage.buckets (id, name, public)
+values ('post-images', 'post-images', true)
+on conflict (id) do nothing;
+
+-- Defense-in-depth, matching the posts/comments RLS policies above: anon has no
+-- write policy on storage.objects for this bucket at all, so even if the
+-- service_role path were ever misconfigured, direct anon uploads would still be
+-- rejected. Public bucket reads don't require a SELECT policy (they're served by
+-- the public object endpoint, not through RLS-gated queries), but this policy is
+-- added anyway for anyone who lists/reads via the authenticated Storage API.
+create policy "post-images: anyone can read"
+  on storage.objects for select
+  to anon, authenticated
+  using (bucket_id = 'post-images');
