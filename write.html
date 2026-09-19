@@ -136,21 +136,25 @@
       font-size: 11px;
       color: var(--muted);
       font-family: 'IBM Plex Mono', monospace;
-      margin-top: -2px;
+      margin-top: 6px;
     }
 
-    .image-previews {
+    .image-row {
       display: flex;
       flex-wrap: wrap;
       gap: 10px;
-      margin-top: 10px;
+    }
+
+    .image-preview,
+    .add-image-btn {
+      width: 84px;
+      height: 84px;
+      border-radius: 6px;
+      flex: 0 0 auto;
     }
 
     .image-preview {
       position: relative;
-      width: 84px;
-      height: 84px;
-      border-radius: 6px;
       overflow: hidden;
       border: 1px solid var(--border);
     }
@@ -181,6 +185,27 @@
     }
 
     .image-preview button:hover { background: var(--red); }
+
+    .add-image-btn {
+      display: flex;
+      flex-direction: column;
+      align-items: center;
+      justify-content: center;
+      gap: 4px;
+      background: var(--bg);
+      border: 1px dashed var(--border);
+      color: var(--muted);
+      font-family: 'IBM Plex Mono', monospace;
+      font-size: 11px;
+      cursor: pointer;
+      transition: border-color 0.15s, color 0.15s;
+    }
+
+    .add-image-btn:hover { border-color: var(--accent); color: var(--accent); }
+
+    .add-image-btn .plus { font-size: 20px; line-height: 1; }
+
+    .body-field.drag-over textarea { outline: 1px dashed var(--accent); }
   </style>
 </head>
 <body>
@@ -218,16 +243,21 @@
     <input name="title" id="title" maxlength="60" placeholder="2~60자" required />
   </div>
 
-  <div>
+  <div class="body-field" id="bodyField">
     <label for="body">본문</label>
-    <textarea name="body" id="body" maxlength="5000" placeholder="2~5000자" required></textarea>
+    <textarea name="body" id="body" maxlength="5000" placeholder="2~5000자 (이미지를 드래그하거나 붙여넣기 할 수 있습니다)" required></textarea>
   </div>
 
   <div>
-    <label for="images">이미지 (최대 4장, jpg/png/webp/gif, 장당 5MB 이하)</label>
-    <input type="file" id="images" accept="image/jpeg,image/png,image/webp,image/gif" multiple />
-    <div class="image-hint" id="imageHint"></div>
-    <div class="image-previews" id="imagePreviews"></div>
+    <label for="addImageBtn">이미지</label>
+    <div class="image-row" id="imageRow">
+      <button type="button" class="add-image-btn" id="addImageBtn">
+        <span class="plus">+</span>
+        <span>이미지 추가</span>
+      </button>
+    </div>
+    <input type="file" id="imageInput" accept="image/jpeg,image/png,image/webp,image/gif" multiple hidden />
+    <div class="image-hint" id="imageHint">최대 4장 · jpg, png, webp, gif · 장당 5MB 이하</div>
   </div>
 
   <div class="hp-field"><input name="website" tabindex="-1" autocomplete="off" /></div>
@@ -282,9 +312,14 @@
     }
   }
 
+  const DEFAULT_IMAGE_HINT = '최대 4장 · jpg, png, webp, gif · 장당 5MB 이하';
+
   function renderImagePreviews() {
-    const wrap = document.getElementById('imagePreviews');
-    wrap.textContent = '';
+    const row = document.getElementById('imageRow');
+    const addBtn = document.getElementById('addImageBtn');
+
+    row.querySelectorAll('.image-preview').forEach((el) => el.remove());
+
     selectedImages.forEach((entry, idx) => {
       const cell = document.createElement('div');
       cell.className = 'image-preview';
@@ -304,27 +339,30 @@
 
       cell.appendChild(img);
       cell.appendChild(removeBtn);
-      wrap.appendChild(cell);
+      row.insertBefore(cell, addBtn);
     });
+
+    addBtn.style.display = selectedImages.length >= MAX_IMAGES ? 'none' : '';
   }
 
-  document.getElementById('images').addEventListener('change', async (e) => {
+  // Shared by the file picker, drag-and-drop onto the body field, and pasting
+  // into it — all three just need to hand a list of Files here.
+  async function addFiles(fileList) {
     const hintEl = document.getElementById('imageHint');
-    const files = Array.from(e.target.files || []);
-    e.target.value = ''; // reset so picking the same file again after removing it still fires 'change'
-    hintEl.textContent = '';
+    const files = Array.from(fileList || []);
+    let message = '';
 
     for (const file of files) {
       if (selectedImages.length >= MAX_IMAGES) {
-        hintEl.textContent = `이미지는 최대 ${MAX_IMAGES}장까지 첨부할 수 있습니다.`;
+        message = `이미지는 최대 ${MAX_IMAGES}장까지 첨부할 수 있습니다.`;
         break;
       }
       if (!ALLOWED_TYPES.includes(file.type)) {
-        hintEl.textContent = 'jpg, png, webp, gif 형식만 첨부할 수 있습니다.';
+        message = 'jpg, png, webp, gif 형식만 첨부할 수 있습니다.';
         continue;
       }
       if (file.size > MAX_ORIGINAL_BYTES) {
-        hintEl.textContent = '이미지는 5MB를 초과할 수 없습니다.';
+        message = '이미지는 5MB를 초과할 수 없습니다.';
         continue;
       }
 
@@ -332,11 +370,54 @@
         const compressed = await resizeAndCompressToWebp(file);
         selectedImages.push({ blob: compressed, previewUrl: URL.createObjectURL(compressed) });
       } catch (err) {
-        hintEl.textContent = '이미지를 처리하지 못했습니다.';
+        message = '이미지를 처리하지 못했습니다.';
       }
     }
 
+    hintEl.textContent = message || DEFAULT_IMAGE_HINT;
     renderImagePreviews();
+  }
+
+  const imageInput = document.getElementById('imageInput');
+  document.getElementById('addImageBtn').addEventListener('click', () => imageInput.click());
+  imageInput.addEventListener('change', (e) => {
+    const files = e.target.files;
+    e.target.value = ''; // reset so picking the same file again after removing it still fires 'change'
+    addFiles(files);
+  });
+
+  const bodyField = document.getElementById('bodyField');
+  const bodyTextarea = document.getElementById('body');
+
+  ['dragenter', 'dragover'].forEach((evt) => {
+    bodyField.addEventListener(evt, (e) => {
+      e.preventDefault();
+      bodyField.classList.add('drag-over');
+    });
+  });
+  ['dragleave', 'drop'].forEach((evt) => {
+    bodyField.addEventListener(evt, (e) => {
+      if (evt === 'dragleave' && bodyField.contains(e.relatedTarget)) return;
+      bodyField.classList.remove('drag-over');
+    });
+  });
+  bodyField.addEventListener('drop', (e) => {
+    e.preventDefault();
+    const files = Array.from(e.dataTransfer?.files || []).filter((f) => f.type.startsWith('image/'));
+    if (files.length) addFiles(files);
+  });
+
+  bodyTextarea.addEventListener('paste', (e) => {
+    const items = Array.from(e.clipboardData?.items || []);
+    const imageFiles = items
+      .filter((item) => item.kind === 'file' && item.type.startsWith('image/'))
+      .map((item) => item.getAsFile())
+      .filter(Boolean);
+    if (imageFiles.length) addFiles(imageFiles);
+    // Deliberately not calling preventDefault(): a copied image normally has no
+    // accompanying text/plain payload, so the default paste is a no-op alongside
+    // this; if it ever does carry text too, letting that paste through as well
+    // is the least surprising behavior.
   });
 
   function blobToDataUrl(blob) {
