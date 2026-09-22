@@ -6,9 +6,6 @@ const COMPANIES = [
   { id: 'google',    name: 'Google DeepMind', queryBase: 'Google Gemini latest model release update' },
   { id: 'meta',      name: 'Meta AI',   queryBase: 'Meta Llama latest model release update' },
   { id: 'mistral',   name: 'Mistral AI', queryBase: 'Mistral AI latest model release update' },
-  { id: 'xai',        name: 'xAI',        queryBase: 'xAI Grok latest model release update' },
-  { id: 'deepseek',   name: 'DeepSeek',   queryBase: 'DeepSeek latest model release update' },
-  { id: 'perplexity', name: 'Perplexity', queryBase: 'Perplexity AI latest model feature update' },
 ];
 
 const MIN_SUMMARY_LENGTH = 20;
