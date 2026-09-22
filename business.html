@@ -10,7 +10,7 @@
     gtag('js', new Date());
     gtag('config', 'G-6N0XZCCW0J');
   </script>
-  <title>게시판 - 혼AI</title>
+  <title>사장님 AI 활용 - 혼AI</title>
   <style>
     @import url('https://fonts.googleapis.com/css2?family=IBM+Plex+Mono:wght@400;600&family=Inter:wght@400;500;600;700&display=swap');
 
@@ -95,31 +95,6 @@
       flex-wrap: wrap;
     }
 
-    .tabs {
-      max-width: 900px;
-      margin: 0 auto 20px;
-      display: flex;
-      gap: 8px;
-      flex-wrap: wrap;
-    }
-
-    .tab {
-      padding: 6px 14px;
-      border-radius: 6px;
-      font-size: 13px;
-      font-family: 'IBM Plex Mono', monospace;
-      color: var(--muted);
-      text-decoration: none;
-      background: var(--surface);
-      border: 1px solid var(--border);
-    }
-
-    .tab.active {
-      color: #fff;
-      background: var(--accent);
-      border-color: var(--accent);
-    }
-
     .post-list {
       max-width: 900px;
       margin: 0 auto;
@@ -143,14 +118,6 @@
     }
 
     .post-row:hover { background: #1a1a20; }
-
-    .post-row .cat {
-      font-size: 11px;
-      font-family: 'IBM Plex Mono', monospace;
-      color: var(--accent);
-      flex-shrink: 0;
-      width: 56px;
-    }
 
     .post-row .title {
       flex: 1;
@@ -204,15 +171,14 @@
 <header>
   <div class="title-block">
     <a href="index.html"><h1>혼AI</h1></a>
-    <p>게시판</p>
+    <p>사장님 AI 활용</p>
   </div>
   <div class="header-actions">
-    <a href="tools.html" class="btn secondary">AI 툴</a>
-    <a href="write.html" class="btn">글쓰기</a>
+    <a href="board.html" class="btn secondary">게시판</a>
+    <a href="write.html?category=business" class="btn">글쓰기</a>
   </div>
 </header>
 
-<div class="tabs" id="tabs"></div>
 <div class="post-list" id="postList"></div>
 <div class="pagination" id="pagination"></div>
 
@@ -220,14 +186,11 @@
   const SUPABASE_URL = 'https://clpwrmxegqvzzcqcxdsa.supabase.co';
   const SUPABASE_ANON_KEY = 'sb_publishable_PiSGtCuULXpdHlOgYdWK0A_jmTgqIXQ';
   const PAGE_SIZE = 20;
-  const CATEGORY_LABELS = { notice: '공지사항', free: '일반', dev: '개발', business: '사장님 AI 활용' };
+  const CATEGORY = 'business';
 
   function getParams() {
     const p = new URLSearchParams(location.search);
-    return {
-      category: p.get('category') || 'all',
-      page: Math.max(1, parseInt(p.get('page') || '1', 10) || 1),
-    };
+    return { page: Math.max(1, parseInt(p.get('page') || '1', 10) || 1) };
   }
 
   function formatRelativeTime(iso) {
@@ -240,32 +203,10 @@
     return `${diffDay}일 전`;
   }
 
-  function renderTabs(active) {
-    const tabsEl = document.getElementById('tabs');
-    tabsEl.textContent = '';
-    [['all', '전체'], ['notice', '공지사항'], ['free', '일반'], ['dev', '개발']].forEach(([id, label]) => {
-      const a = document.createElement('a');
-      a.className = 'tab' + (id === active ? ' active' : '');
-      a.textContent = label;
-      a.href = id === 'all' ? 'board.html' : `board.html?category=${id}`;
-      tabsEl.appendChild(a);
-    });
-
-    const contact = document.createElement('a');
-    contact.className = 'tab';
-    contact.textContent = '문의사항';
-    contact.href = 'contact.html';
-    tabsEl.appendChild(contact);
-  }
-
   function buildRow(row) {
     const a = document.createElement('a');
     a.className = 'post-row';
     a.href = `post.html?id=${encodeURIComponent(row.id)}`;
-
-    const cat = document.createElement('span');
-    cat.className = 'cat';
-    cat.textContent = CATEGORY_LABELS[row.category] || row.category;
 
     const title = document.createElement('span');
     title.className = 'title';
@@ -283,22 +224,20 @@
     meta.className = 'meta';
     meta.textContent = `${row.nickname} · ${formatRelativeTime(row.created_at)}`;
 
-    a.appendChild(cat);
     a.appendChild(title);
     a.appendChild(meta);
     return a;
   }
 
-  function renderPagination(page, total, category) {
+  function renderPagination(page, total) {
     const el = document.getElementById('pagination');
     el.textContent = '';
     const totalPages = Math.max(1, Math.ceil(total / PAGE_SIZE));
-    const qs = category !== 'all' ? `category=${category}&` : '';
 
     if (page > 1) {
       const prev = document.createElement('a');
       prev.textContent = '이전';
-      prev.href = `board.html?${qs}page=${page - 1}`;
+      prev.href = `business.html?page=${page - 1}`;
       el.appendChild(prev);
     } else {
       const span = document.createElement('span');
@@ -314,7 +253,7 @@
     if (page < totalPages) {
       const next = document.createElement('a');
       next.textContent = '다음';
-      next.href = `board.html?${qs}page=${page + 1}`;
+      next.href = `business.html?page=${page + 1}`;
       el.appendChild(next);
     } else {
       const span = document.createElement('span');
@@ -340,27 +279,18 @@
   }
 
   async function loadPosts() {
-    const { category, page } = getParams();
-    renderTabs(category);
-
+    const { page } = getParams();
     const offset = (page - 1) * PAGE_SIZE;
     const select = 'select=id,category,nickname,title,created_at,comments(id)';
-    let url = `${SUPABASE_URL}/rest/v1/posts?${select}&order=created_at.desc&limit=${PAGE_SIZE}&offset=${offset}`;
-    url += category === 'all' ? '&category=neq.notice' : `&category=eq.${category}`;
+    const url = `${SUPABASE_URL}/rest/v1/posts?${select}&category=eq.${CATEGORY}&order=created_at.desc&limit=${PAGE_SIZE}&offset=${offset}`;
 
     const listEl = document.getElementById('postList');
     listEl.textContent = '';
 
     try {
-      if (category === 'all' && page === 1) {
-        const noticeUrl = `${SUPABASE_URL}/rest/v1/posts?${select}&category=eq.notice&order=created_at.desc&limit=5`;
-        const { rows: noticeRows } = await fetchPosts(noticeUrl);
-        noticeRows.forEach((row) => listEl.appendChild(buildRow(row)));
-      }
-
       const { rows, total } = await fetchPosts(url);
 
-      if (rows.length === 0 && listEl.children.length === 0) {
+      if (rows.length === 0) {
         const empty = document.createElement('div');
         empty.className = 'empty';
         empty.textContent = '아직 게시글이 없습니다.';
@@ -369,7 +299,7 @@
         rows.forEach((row) => listEl.appendChild(buildRow(row)));
       }
 
-      renderPagination(page, total, category);
+      renderPagination(page, total);
     } catch (err) {
       listEl.textContent = '';
       const empty = document.createElement('div');

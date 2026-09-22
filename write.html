@@ -269,6 +269,17 @@
 </form>
 
 <script>
+  // A category passed via ?category= (e.g. from business.html's "글쓰기" button)
+  // locks the field instead of showing the picker, so that page can feel like
+  // its own dedicated space rather than a detour through the general board.
+  const LOCKABLE_CATEGORIES = ['free', 'dev', 'business'];
+  const lockedCategory = new URLSearchParams(location.search).get('category');
+  if (lockedCategory && LOCKABLE_CATEGORIES.includes(lockedCategory)) {
+    const categoryField = document.getElementById('category');
+    categoryField.value = lockedCategory;
+    categoryField.closest('div').style.display = 'none';
+  }
+
   const MAX_IMAGES = 4;
   const MAX_ORIGINAL_BYTES = 5 * 1024 * 1024;
   const MAX_EDGE = 1600;
