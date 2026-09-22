@@ -1,0 +1,213 @@
+export const config = { maxDuration: 60 };
+
+// 한 번 실행에 최대 이만큼만 신규 제안 — 비용 통제 + 스팸성 대량 삽입 방지.
+const MAX_NEW_TOOLS_PER_RUN = 5;
+
+const CATEGORY_LABELS = {
+  chat: '대화형 AI', writing: '글쓰기·번역', image: '이미지·디자인',
+  media: '영상·음성', dev: '코딩·개발', automation: '자동화·업무', docs: '문서·회의',
+};
+
+const PROPOSE_TOOLS_TOOL = {
+  name: 'propose_tools',
+  description: '이번에 새로 발굴한 해외 AI 툴 목록을 구조화된 형태로 반환한다. 없으면 빈 배열.',
+  input_schema: {
+    type: 'object',
+    properties: {
+      tools: {
+        type: 'array',
+        items: {
+          type: 'object',
+          properties: {
+            name: { type: 'string', description: '툴의 공식 명칭' },
+            url: { type: 'string', description: '공식 웹사이트 URL (추측 금지, 실제 확인된 주소만)' },
+            description: { type: 'string', description: '한국어 1~2문장. 과장 광고 문구 없이 핵심 기능만.' },
+            category: { type: 'string', enum: Object.keys(CATEGORY_LABELS) },
+            price: { type: 'string', enum: ['free', 'freemium', 'paid'] },
+            korean: { type: 'string', enum: ['full', 'partial', 'none'], description: '한국어 UI/기능 지원 수준' },
+            target: { type: 'string', enum: ['dev', 'biz', 'both'], description: '1인 개발자용인지 소상공인/1인사업자용인지' },
+          },
+          required: ['name', 'url', 'description', 'category', 'price', 'korean', 'target'],
+        },
+      },
+    },
+    required: ['tools'],
+  },
+};
+
+function buildSystemPrompt(todayKR) {
+  return `너는 한국의 1인 개발자·소상공인·1인 사업자를 위한 해외 AI 툴 큐레이터다.
+오늘 날짜는 ${todayKR}이다.
+
+목표: 최근에 새로 나왔거나 최근 주목받기 시작한 해외(비한국) AI 툴 중에서,
+이 타겟에게 실제로 쓸모 있을 만한 것만 골라 최대 ${MAX_NEW_TOOLS_PER_RUN}개까지 제안해라.
+
+규칙:
+- 이미 목록에 있다고 알려준 툴은 절대 다시 제안하지 마라.
+- 실제로 검색으로 확인한, 접근 가능한 공식 URL만 써라. URL을 추측하지 마라.
+- description은 한국어 1~2문장으로, 과장이나 광고성 문구 없이 무슨 기능을 하는 툴인지만 정확히 써라.
+- 가격 정보(price)는 검색으로 확인 안 되면 'freemium'으로 보수적으로 표시해라. 확신 없는 걸 'free'로 단정하지 마라.
+- category/price/korean/target은 반드시 주어진 값 중 하나만 써라.
+- 확신이 서는 후보가 ${MAX_NEW_TOOLS_PER_RUN}개보다 적으면 억지로 채우지 말고 그만큼만 반환해라. 없으면 빈 배열을 반환해라.
+- 반드시 propose_tools 도구를 호출해서만 응답해라.`;
+}
+
+function buildUserPrompt(existingNames) {
+  const existingList = existingNames.length > 0
+    ? existingNames.map((n) => `- ${n}`).join('\n')
+    : '(현재 등록된 툴 없음)';
+
+  return `아래는 이미 사이트에 등록되어 있는 툴 목록이다 (등록 대기 중인 것 포함). 이 목록에 있는 건 절대 다시 제안하지 마라:
+${existingList}
+
+카테고리 참고: ${Object.entries(CATEGORY_LABELS).map(([k, v]) => `${k}=${v}`).join(', ')}
+
+최근 새로 나왔거나 화제가 된 해외 AI 툴을 검색해서, 위 목록에 없는 것 중 한국 1인 개발자/소상공인에게 유용할 만한 걸 찾아 propose_tools로 반환해라.`;
+}
+
+async function fetchExistingTools() {
+  const res = await fetch(
+    `${process.env.SUPABASE_URL}/rest/v1/tools?select=name,url`,
+    {
+      headers: {
+        apikey: process.env.SUPABASE_SERVICE_ROLE_KEY,
+        Authorization: `Bearer ${process.env.SUPABASE_SERVICE_ROLE_KEY}`,
+      },
+    }
+  );
+  if (!res.ok) {
+    const body = await res.text();
+    throw new Error(`기존 tools 조회 실패: ${res.status} ${body}`);
+  }
+  return res.json();
+}
+
+function normalizeName(name) {
+  return String(name || '').trim().toLowerCase();
+}
+
+function normalizeUrl(url) {
+  return String(url || '')
+    .trim()
+    .toLowerCase()
+    .replace(/^https?:\/\//, '')
+    .replace(/^www\./, '')
+    .replace(/\/+$/, '');
+}
+
+async function proposeNewTools(existingTools) {
+  const now = new Date();
+  const todayKR = now.toLocaleDateString('ko-KR', { year: 'numeric', month: 'long', day: 'numeric' });
+  const existingNames = existingTools.map((t) => t.name);
+
+  const response = await fetch('https://api.anthropic.com/v1/messages', {
+    method: 'POST',
+    headers: {
+      'Content-Type': 'application/json',
+      'x-api-key': process.env.ANTHROPIC_API_KEY,
+      'anthropic-version': '2023-06-01',
+    },
+    body: JSON.stringify({
+      model: 'claude-haiku-4-5-20251001',
+      max_tokens: 2000,
+      system: buildSystemPrompt(todayKR),
+      tools: [
+        { type: 'web_search_20250305', name: 'web_search', max_uses: 5 },
+        PROPOSE_TOOLS_TOOL,
+      ],
+      tool_choice: { type: 'tool', name: 'propose_tools' },
+      messages: [{ role: 'user', content: buildUserPrompt(existingNames) }],
+    }),
+  });
+
+  const data = await response.json();
+
+  if (data.error) {
+    console.error(`discover-tools: Anthropic API error: status=${response.status} body=${JSON.stringify(data.error)}`);
+    throw new Error(data.error.message);
+  }
+
+  const toolUse = data.content.find((b) => b.type === 'tool_use' && b.name === 'propose_tools');
+  if (!toolUse) {
+    throw new Error('Claude가 propose_tools 도구를 호출하지 않음 — 응답 형식이 예상과 다름');
+  }
+
+  const proposed = Array.isArray(toolUse.input?.tools) ? toolUse.input.tools : [];
+  console.log(`discover-tools: Claude proposed ${proposed.length} tool(s)`);
+  return proposed;
+}
+
+async function insertTool(tool) {
+  const res = await fetch(`${process.env.SUPABASE_URL}/rest/v1/tools`, {
+    method: 'POST',
+    headers: {
+      'Content-Type': 'application/json',
+      apikey: process.env.SUPABASE_SERVICE_ROLE_KEY,
+      Authorization: `Bearer ${process.env.SUPABASE_SERVICE_ROLE_KEY}`,
+      Prefer: 'return=minimal',
+    },
+    body: JSON.stringify({
+      name: tool.name,
+      description: tool.description,
+      url: tool.url,
+      category: tool.category,
+      price: tool.price,
+      korean: tool.korean,
+      target: tool.target,
+      // 사람이 Supabase 대시보드에서 검토 후 is_published를 true로 바꾸기 전까지는
+      // 사이트에 노출되지 않는다 — 기존 tools 테이블의 수동 큐레이션 원칙을 그대로 따름.
+      is_published: false,
+      source: 'auto',
+    }),
+  });
+
+  if (!res.ok) {
+    const body = await res.text();
+    throw new Error(`삽입 실패 (${tool.name}): ${res.status} ${body}`);
+  }
+}
+
+export default async function handler(req, res) {
+  const authHeader = req.headers['authorization'];
+  if (authHeader !== `Bearer ${process.env.CRON_SECRET}`) {
+    return res.status(401).json({ error: 'Unauthorized' });
+  }
+
+  try {
+    const existingTools = await fetchExistingTools();
+    const existingNameSet = new Set(existingTools.map((t) => normalizeName(t.name)));
+    const existingUrlSet = new Set(existingTools.map((t) => normalizeUrl(t.url)));
+
+    const proposed = await proposeNewTools(existingTools);
+
+    const inserted = [];
+    const skippedDuplicates = [];
+    const failed = [];
+
+    for (const tool of proposed.slice(0, MAX_NEW_TOOLS_PER_RUN)) {
+      const isDuplicate =
+        existingNameSet.has(normalizeName(tool.name)) || existingUrlSet.has(normalizeUrl(tool.url));
+
+      if (isDuplicate) {
+        skippedDuplicates.push(tool.name);
+        continue;
+      }
+
+      try {
+        await insertTool(tool);
+        inserted.push(tool.name);
+        // 같은 실행 안에서 Claude가 비슷한 이름/URL을 중복 제안하는 것도 막는다.
+        existingNameSet.add(normalizeName(tool.name));
+        existingUrlSet.add(normalizeUrl(tool.url));
+      } catch (e) {
+        console.error(`discover-tools: insert failed for ${tool.name}: ${e.message}`);
+        failed.push({ name: tool.name, reason: e.message });
+      }
+    }
+
+    return res.status(200).json({ inserted, skippedDuplicates, failed });
+  } catch (e) {
+    console.error(`discover-tools: ${e.message}`);
+    return res.status(500).json({ error: e.message });
+  }
+}

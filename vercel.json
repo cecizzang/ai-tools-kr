@@ -1,5 +1,6 @@
 {
   "crons": [
-    { "path": "/api/cron/update-companies", "schedule": "0 0 * * *" }
+    { "path": "/api/cron/update-companies", "schedule": "0 0 * * *" },
+    { "path": "/api/cron/discover-tools", "schedule": "0 3 * * 1" }
   ]
 }
