@@ -3,6 +3,13 @@
 <head>
   <meta charset="UTF-8" />
   <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+  <script async src="https://www.googletagmanager.com/gtag/js?id=G-6N0XZCCW0J"></script>
+  <script>
+    window.dataLayer = window.dataLayer || [];
+    function gtag(){dataLayer.push(arguments);}
+    gtag('js', new Date());
+    gtag('config', 'G-6N0XZCCW0J');
+  </script>
   <title>게시판 - 혼AI</title>
   <style>
     @import url('https://fonts.googleapis.com/css2?family=IBM+Plex+Mono:wght@400;600&family=Inter:wght@400;500;600;700&display=swap');
@@ -213,7 +220,7 @@
   const SUPABASE_URL = 'https://clpwrmxegqvzzcqcxdsa.supabase.co';
   const SUPABASE_ANON_KEY = 'sb_publishable_PiSGtCuULXpdHlOgYdWK0A_jmTgqIXQ';
   const PAGE_SIZE = 20;
-  const CATEGORY_LABELS = { notice: '공지사항', free: '일반', dev: '개발' };
+  const CATEGORY_LABELS = { notice: '공지사항', free: '일반', dev: '개발', business: '사장님 AI 활용' };
 
   function getParams() {
     const p = new URLSearchParams(location.search);
@@ -236,7 +243,7 @@
   function renderTabs(active) {
     const tabsEl = document.getElementById('tabs');
     tabsEl.textContent = '';
-    [['all', '전체'], ['notice', '공지사항'], ['free', '일반'], ['dev', '개발']].forEach(([id, label]) => {
+    [['all', '전체'], ['notice', '공지사항'], ['free', '일반'], ['dev', '개발'], ['business', '사장님 AI 활용']].forEach(([id, label]) => {
       const a = document.createElement('a');
       a.className = 'tab' + (id === active ? ' active' : '');
       a.textContent = label;

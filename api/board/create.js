@@ -12,7 +12,7 @@ import {
   publicStorageUrl,
 } from './_lib.js';
 
-const CATEGORIES = ['free', 'dev'];
+const CATEGORIES = ['free', 'dev', 'business'];
 
 const IMAGE_BUCKET = 'post-images';
 const MAX_IMAGES = 4;
