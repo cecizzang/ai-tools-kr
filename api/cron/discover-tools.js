@@ -21,7 +21,7 @@ const PROPOSE_TOOLS_TOOL = {
           properties: {
             name: { type: 'string', description: '툴의 공식 명칭' },
             url: { type: 'string', description: '공식 웹사이트 URL (추측 금지, 실제 확인된 주소만)' },
-            description: { type: 'string', description: '한국어 1~2문장. 과장 광고 문구 없이 핵심 기능만.' },
+            description: { type: 'string', description: '한국어 40자 안팎 한 문장. 과장 광고 문구 없이 핵심 기능만.' },
             category: { type: 'string', enum: Object.keys(CATEGORY_LABELS) },
             price: { type: 'string', enum: ['free', 'freemium', 'paid'] },
             korean: { type: 'string', enum: ['full', 'partial', 'none'], description: '한국어 UI/기능 지원 수준' },
@@ -35,7 +35,11 @@ const PROPOSE_TOOLS_TOOL = {
   },
 };
 
-function buildSystemPrompt(todayKR) {
+function buildSystemPrompt(todayKR, descriptionExamples) {
+  const examples = descriptionExamples.length > 0
+    ? `\n  기존 등록 툴의 description 예시 (이 길이와 톤에 맞춰라):\n${descriptionExamples.map((t) => `  - ${t.name}: ${t.description}`).join('\n')}`
+    : '';
+
   return `너는 한국의 1인 개발자·소상공인·1인 사업자를 위한 해외 AI 툴 큐레이터다.
 오늘 날짜는 ${todayKR}이다.
 
@@ -43,9 +47,12 @@ function buildSystemPrompt(todayKR) {
 이 타겟에게 실제로 쓸모 있을 만한 것만 골라 최대 ${MAX_NEW_TOOLS_PER_RUN}개까지 제안해라.
 
 규칙:
+- 최근 3개월 안에 출시됐거나 주요 업데이트가 있었던 툴을 우선해라. 이미 오래전부터 널리 알려진 툴은 후순위다.
+- 빅테크(OpenAI, Google, Microsoft, Meta, Anthropic, Amazon, Apple 등)의 본체 서비스나 모델 자체는 제외해라.
+  예: ChatGPT, Gemini, Veo, Copilot, Claude 같은 서비스·모델은 제안하지 마라.
 - 이미 목록에 있다고 알려준 툴은 절대 다시 제안하지 마라.
 - 실제로 검색으로 확인한, 접근 가능한 공식 URL만 써라. URL을 추측하지 마라.
-- description은 한국어 1~2문장으로, 과장이나 광고성 문구 없이 무슨 기능을 하는 툴인지만 정확히 써라.
+- description은 한국어 40자 안팎의 한 문장으로, 과장이나 광고성 문구 없이 무슨 기능을 하는 툴인지만 정확히 써라.${examples}
 - 가격 정보(price)는 검색으로 확인 안 되면 'freemium'으로 보수적으로 표시해라. 확신 없는 걸 'free'로 단정하지 마라.
 - category/price/korean/target은 반드시 주어진 값 중 하나만 써라.
 - 확신이 서는 후보가 ${MAX_NEW_TOOLS_PER_RUN}개보다 적으면 억지로 채우지 말고 그만큼만 반환해라. 없으면 빈 배열을 반환해라.
@@ -67,7 +74,7 @@ ${existingList}
 
 async function fetchExistingTools() {
   const res = await fetch(
-    `${process.env.SUPABASE_URL}/rest/v1/tools?select=name,url`,
+    `${process.env.SUPABASE_URL}/rest/v1/tools?select=name,url,description,is_published,source&order=sort_order.asc`,
     {
       headers: {
         apikey: process.env.SUPABASE_SERVICE_ROLE_KEY,
@@ -86,13 +93,33 @@ function normalizeName(name) {
   return String(name || '').trim().toLowerCase();
 }
 
-function normalizeUrl(url) {
-  return String(url || '')
-    .trim()
-    .toLowerCase()
-    .replace(/^https?:\/\//, '')
-    .replace(/^www\./, '')
-    .replace(/\/+$/, '');
+// 여러 툴이 같은 호스트를 공유하는 곳 — 호스트만 비교하면 서로 다른 툴까지 중복으로 막히므로
+// 이 호스트들은 앞쪽 경로 2단계까지 비교한다 (예: github.com/owner/repo).
+const SHARED_HOSTS = new Set([
+  'github.com', 'gitlab.com', 'huggingface.co', 'google.com', 'chromewebstore.google.com',
+  'chrome.google.com', 'play.google.com', 'apps.apple.com', 'apps.microsoft.com',
+  'marketplace.visualstudio.com', 'producthunt.com', 'notion.site', 'x.com', 'twitter.com',
+]);
+
+// 중복 판정용 키 — 보통은 호스트(www 제거)만 쓰고, 공용 호스트는 경로 앞 2단계까지 붙인다.
+// 같은 서비스의 /app, /pricing 같은 하위 경로 URL도 같은 툴로 잡힌다 (예: gemini.google.com/app).
+function urlKey(url) {
+  const raw = String(url || '').trim().toLowerCase();
+  let parsed;
+  try {
+    parsed = new URL(/^https?:\/\//.test(raw) ? raw : `https://${raw}`);
+  } catch {
+    return raw.replace(/^https?:\/\//, '').replace(/^www\./, '').replace(/\/+$/, '');
+  }
+  const host = parsed.hostname.replace(/^www\./, '');
+  if (!SHARED_HOSTS.has(host)) return host;
+  const segments = parsed.pathname.split('/').filter(Boolean).slice(0, 2);
+  return [host, ...segments].join('/');
+}
+
+function todayKST() {
+  // YYYY-MM-DD (sv-SE 로케일이 ISO 형식으로 출력됨)
+  return new Date().toLocaleDateString('sv-SE', { timeZone: 'Asia/Seoul' });
 }
 
 // pause_turn 이어받기 + propose_tools 재촉을 합친 최대 요청 횟수.
@@ -153,8 +180,12 @@ async function proposeNewTools(existingTools, startedAt) {
   const now = new Date();
   const todayKR = now.toLocaleDateString('ko-KR', { year: 'numeric', month: 'long', day: 'numeric' });
   const existingNames = existingTools.map((t) => t.name);
+  // 자동으로 들어온 문구가 다시 예시가 되면 톤이 점점 틀어지므로, 사람이 쓰고 발행한 것만 쓴다.
+  const descriptionExamples = existingTools
+    .filter((t) => t.is_published && t.source === 'manual' && t.description)
+    .slice(0, 5);
 
-  const system = buildSystemPrompt(todayKR);
+  const system = buildSystemPrompt(todayKR, descriptionExamples);
   const messages = [{ role: 'user', content: buildUserPrompt(existingNames) }];
   let totalWebSearches = 0;
 
@@ -216,6 +247,7 @@ async function insertTool(tool) {
       // 사이트에 노출되지 않는다 — 기존 tools 테이블의 수동 큐레이션 원칙을 그대로 따름.
       is_published: false,
       source: 'auto',
+      last_checked: todayKST(),
     }),
   });
 
@@ -235,7 +267,7 @@ export default async function handler(req, res) {
   try {
     const existingTools = await fetchExistingTools();
     const existingNameSet = new Set(existingTools.map((t) => normalizeName(t.name)));
-    const existingUrlSet = new Set(existingTools.map((t) => normalizeUrl(t.url)));
+    const existingUrlKeySet = new Set(existingTools.map((t) => urlKey(t.url)));
 
     const proposed = await proposeNewTools(existingTools, startedAt);
 
@@ -245,7 +277,7 @@ export default async function handler(req, res) {
 
     for (const tool of proposed.slice(0, MAX_NEW_TOOLS_PER_RUN)) {
       const isDuplicate =
-        existingNameSet.has(normalizeName(tool.name)) || existingUrlSet.has(normalizeUrl(tool.url));
+        existingNameSet.has(normalizeName(tool.name)) || existingUrlKeySet.has(urlKey(tool.url));
 
       if (isDuplicate) {
         skippedDuplicates.push(tool.name);
@@ -257,7 +289,7 @@ export default async function handler(req, res) {
         inserted.push(tool.name);
         // 같은 실행 안에서 Claude가 비슷한 이름/URL을 중복 제안하는 것도 막는다.
         existingNameSet.add(normalizeName(tool.name));
-        existingUrlSet.add(normalizeUrl(tool.url));
+        existingUrlKeySet.add(urlKey(tool.url));
       } catch (e) {
         console.error(`discover-tools: insert failed for ${tool.name}: ${e.message}`);
         failed.push({ name: tool.name, reason: e.message });
