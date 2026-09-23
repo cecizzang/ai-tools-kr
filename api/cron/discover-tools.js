@@ -95,46 +95,104 @@ function normalizeUrl(url) {
     .replace(/\/+$/, '');
 }
 
-async function proposeNewTools(existingTools) {
-  const now = new Date();
-  const todayKR = now.toLocaleDateString('ko-KR', { year: 'numeric', month: 'long', day: 'numeric' });
-  const existingNames = existingTools.map((t) => t.name);
+// pause_turn 이어받기 + propose_tools 재촉을 합친 최대 요청 횟수.
+const MAX_CLAUDE_REQUESTS = 4;
+// 검색이 여러 번 도는 요청은 15~25초씩 걸리므로, 핸들러 시작 후 이 시간이 지나면 새 요청을 시작하지 않는다.
+const CLAUDE_START_CUTOFF_MS = 30_000;
+// 진행 중인 요청도 이 시점에 끊는다 — maxDuration(60s) 전에 Supabase 삽입과 응답까지 끝낼 여유를 남긴다.
+const CLAUDE_HARD_DEADLINE_MS = 52_000;
 
-  const response = await fetch('https://api.anthropic.com/v1/messages', {
-    method: 'POST',
-    headers: {
-      'Content-Type': 'application/json',
-      'x-api-key': process.env.ANTHROPIC_API_KEY,
-      'anthropic-version': '2023-06-01',
-    },
-    body: JSON.stringify({
-      model: 'claude-haiku-4-5-20251001',
-      max_tokens: 2000,
-      system: buildSystemPrompt(todayKR),
-      tools: [
-        { type: 'web_search_20250305', name: 'web_search', max_uses: 5 },
-        PROPOSE_TOOLS_TOOL,
-      ],
-      tool_choice: { type: 'tool', name: 'propose_tools' },
-      messages: [{ role: 'user', content: buildUserPrompt(existingNames) }],
-    }),
-  });
+async function callClaude(system, messages, timeoutMs) {
+  const controller = new AbortController();
+  const timer = setTimeout(() => controller.abort(), timeoutMs);
 
-  const data = await response.json();
+  let response;
+  let data;
+  try {
+    response = await fetch('https://api.anthropic.com/v1/messages', {
+      signal: controller.signal,
+      method: 'POST',
+      headers: {
+        'Content-Type': 'application/json',
+        'x-api-key': process.env.ANTHROPIC_API_KEY,
+        'anthropic-version': '2023-06-01',
+      },
+      body: JSON.stringify({
+        model: 'claude-haiku-4-5-20251001',
+        max_tokens: 4000,
+        system,
+        tools: [
+          { type: 'web_search_20250305', name: 'web_search', max_uses: 5 },
+          PROPOSE_TOOLS_TOOL,
+        ],
+        // tool_choice를 propose_tools로 강제하면 web_search를 건너뛰고 바로 답해버린다.
+        // auto로 두고 시스템 프롬프트로 propose_tools 호출을 유도한다.
+        tool_choice: { type: 'auto' },
+        messages,
+      }),
+    });
+    // 본문 수신도 타임아웃 안에 포함되도록 try 안에서 읽는다.
+    data = await response.json();
+  } catch (e) {
+    if (e.name === 'AbortError') {
+      throw new Error(`Anthropic 요청이 ${timeoutMs}ms 안에 끝나지 않아 중단함`);
+    }
+    throw e;
+  } finally {
+    clearTimeout(timer);
+  }
 
   if (data.error) {
     console.error(`discover-tools: Anthropic API error: status=${response.status} body=${JSON.stringify(data.error)}`);
     throw new Error(data.error.message);
   }
+  return data;
+}
 
-  const toolUse = data.content.find((b) => b.type === 'tool_use' && b.name === 'propose_tools');
-  if (!toolUse) {
-    throw new Error('Claude가 propose_tools 도구를 호출하지 않음 — 응답 형식이 예상과 다름');
+async function proposeNewTools(existingTools, startedAt) {
+  const now = new Date();
+  const todayKR = now.toLocaleDateString('ko-KR', { year: 'numeric', month: 'long', day: 'numeric' });
+  const existingNames = existingTools.map((t) => t.name);
+
+  const system = buildSystemPrompt(todayKR);
+  const messages = [{ role: 'user', content: buildUserPrompt(existingNames) }];
+  let totalWebSearches = 0;
+
+  for (let attempt = 1; attempt <= MAX_CLAUDE_REQUESTS; attempt++) {
+    const elapsed = Date.now() - startedAt;
+    if (elapsed > CLAUDE_START_CUTOFF_MS) {
+      throw new Error(`시간 초과 — ${elapsed}ms 동안 propose_tools 응답을 받지 못함`);
+    }
+
+    const data = await callClaude(system, messages, CLAUDE_HARD_DEADLINE_MS - elapsed);
+    const webSearches = data.usage?.server_tool_use?.web_search_requests ?? 0;
+    totalWebSearches += webSearches;
+    console.log(
+      `discover-tools: request #${attempt} stop_reason=${data.stop_reason} ` +
+      `web_search_requests=${webSearches} (total ${totalWebSearches}) ` +
+      `input_tokens=${data.usage?.input_tokens} output_tokens=${data.usage?.output_tokens} ` +
+      `elapsed=${Date.now() - startedAt}ms`
+    );
+
+    const toolUse = data.content.find((b) => b.type === 'tool_use' && b.name === 'propose_tools');
+    if (toolUse) {
+      const proposed = Array.isArray(toolUse.input?.tools) ? toolUse.input.tools : [];
+      console.log(`discover-tools: Claude proposed ${proposed.length} tool(s) after ${totalWebSearches} web search(es)`);
+      return proposed;
+    }
+
+    // 서버 쪽 web_search 루프가 중간에 멈춘 경우 — 응답을 그대로 붙여서 다시 보내면 이어서 진행한다.
+    messages.push({ role: 'assistant', content: data.content });
+    if (data.stop_reason !== 'pause_turn') {
+      // 검색만 하고 텍스트로 끝낸 경우 — 결과를 propose_tools로 정리하라고 재촉한다.
+      messages.push({
+        role: 'user',
+        content: '지금까지 검색한 결과를 바탕으로 propose_tools 도구를 호출해서 답해라. 확신 있는 후보가 없으면 빈 배열로 호출해라.',
+      });
+    }
   }
 
-  const proposed = Array.isArray(toolUse.input?.tools) ? toolUse.input.tools : [];
-  console.log(`discover-tools: Claude proposed ${proposed.length} tool(s)`);
-  return proposed;
+  throw new Error(`Claude가 ${MAX_CLAUDE_REQUESTS}번 요청 안에 propose_tools를 호출하지 않음`);
 }
 
 async function insertTool(tool) {
@@ -168,6 +226,7 @@ async function insertTool(tool) {
 }
 
 export default async function handler(req, res) {
+  const startedAt = Date.now();
   const authHeader = req.headers['authorization'];
   if (authHeader !== `Bearer ${process.env.CRON_SECRET}`) {
     return res.status(401).json({ error: 'Unauthorized' });
@@ -178,7 +237,7 @@ export default async function handler(req, res) {
     const existingNameSet = new Set(existingTools.map((t) => normalizeName(t.name)));
     const existingUrlSet = new Set(existingTools.map((t) => normalizeUrl(t.url)));
 
-    const proposed = await proposeNewTools(existingTools);
+    const proposed = await proposeNewTools(existingTools, startedAt);
 
     const inserted = [];
     const skippedDuplicates = [];
