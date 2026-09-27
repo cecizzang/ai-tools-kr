@@ -191,6 +191,77 @@
       border: 1px solid var(--border);
       border-radius: 10px;
     }
+    .advisor {
+      max-width: 900px;
+      margin: 0 auto 28px;
+      background: var(--surface);
+      border: 1px solid var(--border);
+      border-radius: 10px;
+      padding: 18px;
+    }
+
+    .advisor label {
+      display: block;
+      font-family: 'IBM Plex Mono', monospace;
+      font-size: 14px;
+      font-weight: 600;
+      margin-bottom: 10px;
+    }
+
+    .advisor-row { display: flex; gap: 8px; }
+
+    .advisor-row input {
+      flex: 1;
+      min-width: 0;
+      background: var(--bg);
+      border: 1px solid var(--border);
+      border-radius: 6px;
+      color: var(--text);
+      font-size: 14px;
+      padding: 10px 12px;
+      font-family: 'Inter', sans-serif;
+    }
+
+    .advisor-row input:focus { outline: none; border-color: var(--accent); }
+
+    .advisor-row button {
+      flex-shrink: 0;
+      background: var(--accent);
+      color: #fff;
+      border: none;
+      border-radius: 6px;
+      padding: 0 16px;
+      font-size: 13px;
+      font-family: 'IBM Plex Mono', monospace;
+      cursor: pointer;
+    }
+
+    .advisor-row button:disabled { opacity: 0.5; cursor: default; }
+
+    .advisor-note {
+      font-size: 11px;
+      color: var(--muted);
+      margin-top: 8px;
+      font-family: 'IBM Plex Mono', monospace;
+    }
+
+    .advisor-hp { position: absolute; left: -9999px; width: 1px; height: 1px; opacity: 0; }
+
+    .advisor-message { font-size: 14px; line-height: 1.6; margin: 16px 0 12px; }
+    .advisor-message.error { color: var(--red); }
+
+    .tool-reason {
+      font-size: 12px;
+      color: var(--accent);
+      line-height: 1.5;
+      border-top: 1px solid var(--border);
+      padding-top: 8px;
+    }
+
+    @media (max-width: 520px) {
+      .advisor-row { flex-direction: column; }
+      .advisor-row button { padding: 10px 16px; }
+    }
   </style>
 </head>
 <body>
@@ -201,6 +272,19 @@
     <p>AI 툴 모음</p>
   </div>
 </header>
+
+<section class="advisor">
+  <form id="advisorForm" autocomplete="off">
+    <label for="advisorInput">어떤 일에 AI를 쓰고 싶으세요?</label>
+    <div class="advisor-row">
+      <input id="advisorInput" type="text" maxlength="300" placeholder="예: 가게 인스타에 올릴 홍보 이미지를 빠르게 만들고 싶어요" />
+      <button id="advisorBtn" type="submit">추천받기</button>
+    </div>
+    <input class="advisor-hp" type="text" name="website" id="advisorHp" tabindex="-1" aria-hidden="true" />
+    <p class="advisor-note">AI가 혼AI에 등록된 툴 중에서 골라 드려요 · 하루 10회 · 질문 내용은 서비스 개선을 위해 익명으로 저장됩니다</p>
+  </form>
+  <div id="advisorResult"></div>
+</section>
 
 <div class="tabs" id="targetToggle"></div>
 <div class="tabs category-tabs" id="categoryTabs"></div>
@@ -370,6 +454,59 @@
       container.appendChild(empty);
     }
   }
+
+  async function askAdvisor(e) {
+    e.preventDefault();
+    const input = document.getElementById('advisorInput');
+    const btn = document.getElementById('advisorBtn');
+    const result = document.getElementById('advisorResult');
+    const question = input.value.trim();
+    if (question.length < 2) { input.focus(); return; }
+
+    btn.disabled = true;
+    btn.textContent = '찾는 중…';
+    result.textContent = '';
+
+    const msg = document.createElement('p');
+    msg.className = 'advisor-message';
+
+    try {
+      const res = await fetch('/api/advisor/ask', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ question, honeypot: document.getElementById('advisorHp').value }),
+      });
+      const data = await res.json().catch(() => ({}));
+      if (!res.ok) throw new Error(data.error || '추천을 불러오지 못했어요.');
+
+      msg.textContent = data.message;
+      result.appendChild(msg);
+
+      if (Array.isArray(data.picks) && data.picks.length > 0) {
+        const grid = document.createElement('div');
+        grid.className = 'tool-grid';
+        data.picks.forEach((t) => {
+          const card = buildCard(t);
+          const reason = document.createElement('p');
+          reason.className = 'tool-reason';
+          reason.textContent = t.reason;
+          card.insertBefore(reason, card.lastChild);
+          grid.appendChild(card);
+        });
+        result.appendChild(grid);
+      }
+      if (typeof gtag === 'function') gtag('event', 'advisor_ask', { picks: (data.picks || []).length });
+    } catch (err) {
+      msg.classList.add('error');
+      msg.textContent = err.message;
+      result.appendChild(msg);
+    } finally {
+      btn.disabled = false;
+      btn.textContent = '추천받기';
+    }
+  }
+
+  document.getElementById('advisorForm').addEventListener('submit', askAdvisor);
 
   loadTools();
 </script>

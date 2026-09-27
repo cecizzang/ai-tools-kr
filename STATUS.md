@@ -1,4 +1,4 @@
-# 상태 메모 (2026-09-23 기준)
+# 상태 메모 (2026-09-27 기준)
 
 ## 반영된 것 (배포 완료)
 - `api/cron/discover-tools.js`: 해외 신규 AI 툴 자동 발굴 크론 (매주 월요일 낮 12시 KST 실행)
@@ -27,6 +27,20 @@
   - description: 40자 안팎 한 문장, `is_published=true` + `source='manual'` 툴의 description을 예시로 프롬프트에 넣음 (자동 문구가 예시로 재사용되며 톤이 틀어지는 것 방지)
   - 중복 체크: URL을 호스트 기준으로 비교 (하위 경로 무시 → gemini.google.com/app도 Gemini와 중복 처리). github.com, huggingface.co 같은 공용 호스트는 경로 앞 2단계까지 비교
   - 삽입 시 `last_checked`를 오늘 날짜(KST)로 채움
+
+## 2026-09-27 AI 툴 추천 상담사 추가 (배포 전 — 아래 순서대로 해야 동작함)
+- `api/advisor/ask.js`: 방문자 질문 + 발행된(`is_published=true`) 툴 목록을 Haiku에 넘겨 최대 3개 추천
+  - 모델은 목록 번호로만 답하고, 서버가 번호를 다시 검증 → 사이트에 없는 툴은 절대 노출 안 됨 (환각 차단)
+  - AI 툴 추천과 무관한 질문이면 추천 없이 안내 문구만
+  - 한도: IP당 하루 10회, 사이트 전체 하루 300회 (KST 자정 기준). 한도 조회 실패 시 막음(비용 보호)
+  - honeypot 필드로 봇 차단, IP는 HMAC 해시만 저장 (게시판과 같은 `IP_HASH_SECRET`)
+- `supabase/advisor.sql`: `advisor_logs` 테이블 (질문/추천 결과/토큰 수) — 방문자는 접근 불가, service_role만
+- `tools.html`: 상단에 질문창 + 추천 카드(이유 표시) 추가, GA 이벤트 `advisor_ask`
+- 배포 순서
+  1. Supabase SQL Editor에서 `supabase/advisor.sql` 실행
+  2. 커밋 + push (Vercel 자동 배포) — 환경변수는 기존 것(ANTHROPIC_API_KEY, SUPABASE_URL, SUPABASE_SERVICE_ROLE_KEY, IP_HASH_SECRET) 그대로 사용
+  3. tools.html에서 질문 몇 개 테스트 → Supabase `advisor_logs`에 기록되는지 확인
+- 나중에 볼 것: `advisor_logs`의 질문들 → 방문자가 찾는데 목록에 없는 툴이 뭔지 (신규 등록 후보)
 
 ## 다음 할 일
 1. 다음 월요일 자동 실행 결과 확인 — 신규 툴 위주로 나오는지, 빅테크 모델이 걸러지는지, description 길이가 맞는지
