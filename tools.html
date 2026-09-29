@@ -72,6 +72,7 @@
     }
 
     .tabs.category-tabs { margin-bottom: 28px; }
+    .tabs.sort-tabs .tab { font-size: 12px; padding: 4px 12px; }
 
     .tab {
       padding: 6px 14px;
@@ -287,6 +288,7 @@
 </section>
 
 <div class="tabs" id="targetToggle"></div>
+<div class="tabs sort-tabs" id="sortToggle"></div>
 <div class="tabs category-tabs" id="categoryTabs"></div>
 <div id="toolSections"></div>
 
@@ -307,11 +309,19 @@
   const PRICE_LABELS = { free: '무료', freemium: '부분유료', paid: '유료' };
   const KOREAN_LABELS = { full: '한국어 지원', partial: '한국어 일부', none: '한국어 미지원' };
 
+  // 정렬 기준: 추천순(sort_order로 수동 지정) / 사이트에 등록된 날짜 기준 최신·오래된 순
+  const SORT_ORDERS = {
+    default: 'sort_order.asc,created_at.desc',
+    new: 'created_at.desc',
+    old: 'created_at.asc',
+  };
+
   function getParams() {
     const p = new URLSearchParams(location.search);
     return {
       target: p.get('target') || 'all',
       category: p.get('category') || 'all',
+      sort: p.get('sort') || 'default',
     };
   }
 
@@ -420,8 +430,9 @@
   }
 
   async function loadTools() {
-    const { target, category } = getParams();
+    const { target, category, sort } = getParams();
     renderToggle('targetToggle', [['all', '전체'], ['dev', '개발자'], ['biz', '사업자']], target, 'target');
+    renderToggle('sortToggle', [['default', '추천순'], ['new', '최신 등록순'], ['old', '오래된 등록순']], sort, 'sort');
     renderToggle('categoryTabs', [['all', '전체'], ...CATEGORIES], category, 'category');
 
     const container = document.getElementById('toolSections');
@@ -429,7 +440,7 @@
 
     try {
       const res = await fetch(
-        `${SUPABASE_URL}/rest/v1/tools?select=id,name,description,url,affiliate_url,category,price,korean,target,last_checked&order=sort_order.asc,created_at.desc`,
+        `${SUPABASE_URL}/rest/v1/tools?select=id,name,description,url,affiliate_url,category,price,korean,target,last_checked&order=${SORT_ORDERS[sort] || SORT_ORDERS.default}`,
         {
           headers: {
             apikey: SUPABASE_ANON_KEY,
