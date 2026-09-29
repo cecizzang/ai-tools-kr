@@ -1,0 +1,450 @@
+<!DOCTYPE html>
+<html lang="ko">
+<head>
+  <meta charset="UTF-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+  <script async src="https://www.googletagmanager.com/gtag/js?id=G-6N0XZCCW0J"></script>
+  <script>
+    window.dataLayer = window.dataLayer || [];
+    function gtag(){dataLayer.push(arguments);}
+    gtag('js', new Date());
+    gtag('config', 'G-6N0XZCCW0J');
+  </script>
+  <meta name="description" content="AI API가 뭔지, 구독이랑 뭐가 다른지, OpenAI·Claude·Gemini API 키 발급부터 첫 호출 예제, 요금 폭탄 안 맞는 법까지. 1인 개발자·사업자를 위한 AI API 입문 가이드." />
+  <meta property="og:title" content="AI API 처음 쓰는 법 - 혼AI" />
+  <meta property="og:description" content="키 발급부터 첫 호출, 요금 감 잡기, 사고 안 나는 법까지 (2026년 9월 기준)" />
+  <meta property="og:type" content="article" />
+  <meta property="og:locale" content="ko_KR" />
+  <title>AI API 처음 쓰는 법: 키 발급부터 첫 호출까지 - 혼AI</title>
+  <style>
+    @import url('https://fonts.googleapis.com/css2?family=IBM+Plex+Mono:wght@400;600&family=Inter:wght@400;500;600;700&display=swap');
+
+    :root {
+      --bg: #0d0d0f;
+      --surface: #141418;
+      --border: #1f1f28;
+      --text: #e8e8f0;
+      --muted: #6b6b80;
+      --accent: #7c6af7;
+      --green: #4ade80;
+      --yellow: #fbbf24;
+      --red: #f87171;
+      --gpt: #10b981;
+      --claude: #d97757;
+      --gemini: #60a5fa;
+    }
+
+    * { box-sizing: border-box; margin: 0; padding: 0; }
+
+    body {
+      background: var(--bg);
+      color: var(--text);
+      font-family: 'Inter', sans-serif;
+      min-height: 100vh;
+      padding: 40px 20px;
+      line-height: 1.65;
+      word-break: keep-all;
+      overflow-wrap: anywhere;
+    }
+
+    header, main, footer { max-width: 900px; margin: 0 auto; }
+
+    header {
+      margin-bottom: 32px;
+      display: flex;
+      align-items: flex-end;
+      justify-content: space-between;
+      gap: 16px;
+      flex-wrap: wrap;
+    }
+    .title-block a { text-decoration: none; color: inherit; }
+    .title-block h1 { font-family: 'IBM Plex Mono', monospace; font-size: 22px; font-weight: 600; letter-spacing: -0.5px; }
+    .title-block p { font-size: 13px; color: var(--muted); margin-top: 6px; font-family: 'IBM Plex Mono', monospace; }
+
+    .btn {
+      display: inline-flex;
+      align-items: center;
+      background: var(--surface);
+      color: var(--text);
+      border: 1px solid var(--border);
+      padding: 10px 18px;
+      border-radius: 6px;
+      font-size: 14px;
+      font-weight: 600;
+      font-family: 'IBM Plex Mono', monospace;
+      text-decoration: none;
+      white-space: nowrap;
+    }
+    .btn.primary { background: var(--accent); border-color: var(--accent); color: #fff; }
+
+    h2.page-title { font-size: 26px; line-height: 1.35; font-weight: 700; letter-spacing: -0.5px; }
+    .lead { color: #b8b8c8; margin-top: 12px; font-size: 15px; }
+    .asof {
+      display: inline-block; margin-top: 14px; font-size: 12px; color: var(--muted);
+      font-family: 'IBM Plex Mono', monospace; border: 1px solid var(--border); border-radius: 4px; padding: 3px 8px;
+    }
+
+    .toc {
+      margin-top: 24px;
+      display: flex;
+      flex-wrap: wrap;
+      gap: 8px;
+    }
+    .toc a {
+      font-size: 13px;
+      font-family: 'IBM Plex Mono', monospace;
+      color: var(--muted);
+      text-decoration: none;
+      background: var(--surface);
+      border: 1px solid var(--border);
+      border-radius: 6px;
+      padding: 6px 12px;
+    }
+    .toc a:hover { color: var(--text); border-color: var(--accent); }
+
+    section { margin-top: 44px; scroll-margin-top: 20px; }
+    h3 { font-family: 'IBM Plex Mono', monospace; font-size: 17px; font-weight: 600; margin-bottom: 14px; }
+    h3 .num { color: var(--accent); margin-right: 6px; }
+    p.body { font-size: 15px; color: #d0d0dc; margin-top: 10px; }
+    p.body:first-of-type { margin-top: 0; }
+    b { font-weight: 600; color: var(--text); }
+
+    .box {
+      background: var(--surface);
+      border: 1px solid var(--border);
+      border-radius: 10px;
+      padding: 18px;
+      font-size: 15px;
+    }
+    .box + .box { margin-top: 12px; }
+    .box ul { list-style: none; }
+    .box li { padding-left: 16px; position: relative; margin-top: 6px; color: #d0d0dc; }
+    .box li:first-child { margin-top: 0; }
+    .box li::before { content: '·'; position: absolute; left: 3px; color: var(--muted); }
+
+    .vs { display: grid; grid-template-columns: 1fr 1fr; gap: 12px; }
+    .vs .box h4 { font-family: 'IBM Plex Mono', monospace; font-size: 14px; margin-bottom: 10px; }
+
+    .warn {
+      background: rgba(251,191,36,0.07);
+      border: 1px solid rgba(251,191,36,0.35);
+      border-radius: 10px;
+      padding: 14px 16px;
+      font-size: 14px;
+      color: #f3e2b0;
+      margin-top: 12px;
+    }
+    .warn b { color: var(--yellow); }
+
+    .providers { display: grid; grid-template-columns: repeat(auto-fit, minmax(240px, 1fr)); gap: 12px; }
+    .provider { background: var(--surface); border: 1px solid var(--border); border-top: 3px solid var(--c); border-radius: 10px; padding: 16px; font-size: 14px; }
+    .provider .name { font-family: 'IBM Plex Mono', monospace; font-weight: 600; color: var(--c); font-size: 15px; }
+    .provider .where { margin-top: 8px; }
+    .provider .where a { color: var(--accent); }
+    .provider ol { padding-left: 18px; margin-top: 8px; color: #d0d0dc; }
+    .provider li { margin-top: 3px; }
+    .provider .pay { margin-top: 10px; font-size: 13px; color: #b8b8c8; }
+
+    .tabs { display: flex; gap: 6px; flex-wrap: wrap; margin-bottom: 10px; }
+    .tabs button {
+      font-family: 'IBM Plex Mono', monospace; font-size: 13px; cursor: pointer;
+      background: var(--surface); color: var(--muted); border: 1px solid var(--border);
+      border-radius: 6px; padding: 6px 14px;
+    }
+    .tabs button.active { color: #fff; background: var(--accent); border-color: var(--accent); }
+    .code-panel { display: none; }
+    .code-panel.active { display: block; }
+    .code-step { font-size: 13px; color: var(--muted); font-family: 'IBM Plex Mono', monospace; margin: 14px 0 6px; }
+    .code-step:first-child { margin-top: 0; }
+    .code {
+      position: relative;
+      background: #0a0a0c;
+      border: 1px solid var(--border);
+      border-radius: 8px;
+    }
+    .code pre {
+      overflow-x: auto;
+      padding: 14px 16px;
+      font-family: 'IBM Plex Mono', monospace;
+      font-size: 13px;
+      line-height: 1.6;
+      color: #d8d8e8;
+      word-break: normal;
+      overflow-wrap: normal;
+      white-space: pre;
+    }
+    .copy {
+      position: absolute; top: 8px; right: 8px;
+      font-size: 11px; font-family: 'IBM Plex Mono', monospace;
+      background: var(--surface); color: var(--muted); border: 1px solid var(--border);
+      border-radius: 4px; padding: 3px 8px; cursor: pointer;
+    }
+    .copy:hover { color: var(--text); }
+    .c-com { color: #6b6b80; }
+    .c-str { color: #a5d6a7; }
+
+    .cost-table { width: 100%; border-collapse: collapse; font-size: 14px; }
+    .cost-table td { padding: 10px 0; border-bottom: 1px solid var(--border); vertical-align: top; }
+    .cost-table tr:last-child td { border-bottom: none; }
+    .cost-table td:last-child { text-align: right; font-family: 'IBM Plex Mono', monospace; color: var(--green); white-space: nowrap; padding-left: 12px; }
+
+    .checklist li::before { content: '✓' !important; color: var(--green) !important; left: 0 !important; }
+    .checklist li { padding-left: 20px !important; }
+
+    .cta {
+      margin-top: 44px;
+      background: linear-gradient(135deg, rgba(124,106,247,0.18), rgba(124,106,247,0.05));
+      border: 1px solid rgba(124,106,247,0.4);
+      border-radius: 10px;
+      padding: 20px;
+      display: flex; align-items: center; justify-content: space-between; gap: 16px; flex-wrap: wrap;
+    }
+    .cta p { font-size: 15px; }
+    .cta .sub { font-size: 13px; color: #b8b8c8; margin-top: 2px; }
+    .cta .actions { display: flex; gap: 8px; flex-wrap: wrap; }
+
+    footer { margin-top: 32px; font-size: 12px; color: var(--muted); font-family: 'IBM Plex Mono', monospace; }
+    footer a { color: var(--muted); }
+
+    @media (max-width: 600px) {
+      body { padding: 28px 16px; }
+      h2.page-title { font-size: 22px; }
+      .vs { grid-template-columns: 1fr; }
+      .code pre { font-size: 12px; }
+    }
+  </style>
+</head>
+<body>
+
+<header>
+  <div class="title-block">
+    <a href="index.html"><h1>혼AI</h1></a>
+    <p>AI API 입문</p>
+  </div>
+  <a href="tools.html" class="btn">AI 툴 모음</a>
+</header>
+
+<main>
+  <h2 class="page-title">AI API 처음 쓰는 법<br />키 발급부터 첫 호출까지</h2>
+  <p class="lead">채팅창에서 쓰던 AI를 내 프로그램·자동화에 붙이고 싶다면 API가 필요해요. 개념부터 요금 감, 첫 코드, 그리고 제일 중요한 "요금 폭탄 안 맞는 법"까지 정리했습니다.</p>
+  <span class="asof">2026년 9월 기준 · 모델 이름과 요금은 자주 바뀌어요</span>
+
+  <nav class="toc">
+    <a href="#what">1. API가 뭔데</a>
+    <a href="#when">2. 언제 필요해</a>
+    <a href="#cost">3. 요금 감 잡기</a>
+    <a href="#key">4. 키 발급</a>
+    <a href="#code">5. 첫 호출</a>
+    <a href="#safe">6. 사고 안 나는 법</a>
+  </nav>
+
+  <section id="what">
+    <h3><span class="num">1</span>API가 뭔데? 구독이랑 뭐가 달라?</h3>
+    <div class="vs">
+      <div class="box">
+        <h4>구독 (ChatGPT Plus 같은 거)</h4>
+        <ul>
+          <li><b>사람</b>이 채팅창에 직접 입력</li>
+          <li>매달 정액</li>
+          <li>일상 업무·검색·글쓰기용</li>
+        </ul>
+      </div>
+      <div class="box">
+        <h4>API</h4>
+        <ul>
+          <li><b>내 프로그램</b>이 AI를 불러서 씀</li>
+          <li>쓴 만큼 결제 (선불 충전)</li>
+          <li>자동화·서비스에 AI 붙이기용</li>
+        </ul>
+      </div>
+    </div>
+    <div class="warn"><b>제일 많이 헷갈리는 것:</b> ChatGPT Plus나 Claude Pro를 결제해도 <b>API는 따로</b> 결제해야 해요. 구독과 API는 계정도, 요금도 별개입니다.</div>
+  </section>
+
+  <section id="when">
+    <h3><span class="num">2</span>언제 API가 필요해?</h3>
+    <div class="box">
+      <ul>
+        <li><b>매일 반복하는 일 자동화:</b> 아침마다 뉴스·리뷰 모아서 요약, 문의 메일 분류</li>
+        <li><b>내 사이트·앱에 AI 붙이기:</b> 상담 챗봇, 상품 설명 자동 생성</li>
+        <li><b>대량 처리:</b> 상품 500개 설명 번역, 리뷰 1,000개 감정 분석</li>
+      </ul>
+    </div>
+    <p class="body" style="margin-top:12px">이 사이트도 API로 돌아가요. 메인의 <b>AI 회사 소식</b>은 매일 자동 요약이고, 툴 모음의 <b>AI 추천 상담</b>도 API로 만든 거예요.</p>
+  </section>
+
+  <section id="cost">
+    <h3><span class="num">3</span>요금 감 잡기</h3>
+    <p class="body">API는 <b>토큰</b> 단위로 돈을 냅니다. 토큰은 글자를 잘게 쪼갠 조각이라고 보면 돼요. 보내는 글(입력)과 받는 글(출력)의 값이 다르고, 보통 출력이 더 비쌉니다.</p>
+    <p class="body">모델마다 가격 차이가 수십 배라서, <b>처음엔 싼 모델로 시작</b>하는 게 정답이에요. (Claude는 Haiku, Gemini는 Flash, OpenAI는 mini 계열)</p>
+    <div class="box" style="margin-top:14px">
+      <table class="cost-table">
+        <tr><td>혼AI 추천 상담 질문 1번 (싼 모델, 툴 목록 30개 같이 보냄)</td><td>약 5~9원</td></tr>
+        <tr><td>15분마다 판단하는 개인 자동화 봇, 하루 96번</td><td>하루 몇백 원 이하</td></tr>
+        <tr><td>처음 연습하면서 이것저것 호출해보기</td><td>$5 충전이면 한참 감</td></tr>
+      </table>
+    </div>
+    <p class="body" style="font-size:13px;color:var(--muted)">* 운영자가 직접 돌려본 실제 사용량 기준이에요. 모델과 글 길이에 따라 달라집니다.</p>
+  </section>
+
+  <section id="key">
+    <h3><span class="num">4</span>키 발급 (회사별)</h3>
+    <div class="providers">
+      <div class="provider" style="--c: var(--claude)">
+        <div class="name">Claude (Anthropic)</div>
+        <div class="where"><a href="https://platform.claude.com" target="_blank" rel="noopener noreferrer">platform.claude.com</a></div>
+        <ol>
+          <li>가입·로그인</li>
+          <li>결제 → 크레딧 충전</li>
+          <li>API Keys → 새 키 만들기</li>
+        </ol>
+        <div class="pay">선불 충전식. 자동 충전을 끄면 충전한 만큼만 나가요.</div>
+      </div>
+      <div class="provider" style="--c: var(--gpt)">
+        <div class="name">OpenAI</div>
+        <div class="where"><a href="https://platform.openai.com" target="_blank" rel="noopener noreferrer">platform.openai.com</a></div>
+        <ol>
+          <li>가입·로그인</li>
+          <li>Settings → Billing에서 충전 (최소 $5)</li>
+          <li>API keys → Create new secret key</li>
+        </ol>
+        <div class="pay">선불 충전식. ChatGPT 구독과는 별개예요.</div>
+      </div>
+      <div class="provider" style="--c: var(--gemini)">
+        <div class="name">Gemini (Google)</div>
+        <div class="where"><a href="https://aistudio.google.com" target="_blank" rel="noopener noreferrer">aistudio.google.com</a></div>
+        <ol>
+          <li>구글 계정으로 로그인</li>
+          <li>Get API key → 키 만들기</li>
+        </ol>
+        <div class="pay"><b>무료 사용량이 있어서</b> 연습용으로 좋아요. 단, 무료로 보낸 내용은 구글 서비스 개선에 쓰일 수 있으니 개인정보·영업 비밀은 넣지 마세요.</div>
+      </div>
+    </div>
+    <div class="warn"><b>키는 만들 때 딱 한 번만 보여줘요.</b> 바로 안전한 곳(아래 .env 파일)에 저장하세요.</div>
+  </section>
+
+  <section id="code">
+    <h3><span class="num">5</span>첫 호출 (파이썬)</h3>
+    <p class="body" style="margin-bottom:14px">파이썬이 깔려 있다는 가정이에요. 아래 순서대로 터미널에 치면 AI 답이 출력됩니다.</p>
+
+    <div class="tabs" role="tablist">
+      <button class="active" data-tab="claude" role="tab">Claude</button>
+      <button data-tab="gemini" role="tab">Gemini</button>
+      <button data-tab="openai" role="tab">OpenAI</button>
+    </div>
+
+    <div class="code-panel active" id="panel-claude">
+      <div class="code-step">① 라이브러리 설치</div>
+      <div class="code"><pre>pip install anthropic python-dotenv</pre><button class="copy">복사</button></div>
+      <div class="code-step">② 같은 폴더에 .env 파일 만들고 키 넣기</div>
+      <div class="code"><pre>ANTHROPIC_API_KEY=여기에_발급받은_키</pre><button class="copy">복사</button></div>
+      <div class="code-step">③ hello.py 만들고 실행 (python hello.py)</div>
+      <div class="code"><pre>from dotenv import load_dotenv
+import anthropic
+
+load_dotenv()  <span class="c-com"># .env에서 키를 읽어옴</span>
+client = anthropic.Anthropic()
+
+message = client.messages.create(
+    model=<span class="c-str">"claude-haiku-4-5"</span>,  <span class="c-com"># 싼 모델부터. 최신 이름은 공식 문서 모델 목록 확인</span>
+    max_tokens=500,
+    messages=[{<span class="c-str">"role"</span>: <span class="c-str">"user"</span>, <span class="c-str">"content"</span>: <span class="c-str">"동네 카페 인스타 소개글 3줄 써줘"</span>}],
+)
+print(message.content[0].text)</pre><button class="copy">복사</button></div>
+    </div>
+
+    <div class="code-panel" id="panel-gemini">
+      <div class="code-step">① 라이브러리 설치</div>
+      <div class="code"><pre>pip install google-genai python-dotenv</pre><button class="copy">복사</button></div>
+      <div class="code-step">② 같은 폴더에 .env 파일 만들고 키 넣기</div>
+      <div class="code"><pre>GEMINI_API_KEY=여기에_발급받은_키</pre><button class="copy">복사</button></div>
+      <div class="code-step">③ hello.py 만들고 실행 (python hello.py)</div>
+      <div class="code"><pre>from dotenv import load_dotenv
+from google import genai
+
+load_dotenv()  <span class="c-com"># .env에서 키를 읽어옴</span>
+client = genai.Client()
+
+response = client.models.generate_content(
+    model=<span class="c-str">"gemini-3.5-flash"</span>,  <span class="c-com"># 무료로 쓸 수 있는 Flash 계열. 최신 이름은 AI Studio에서 확인</span>
+    contents=<span class="c-str">"동네 카페 인스타 소개글 3줄 써줘"</span>,
+)
+print(response.text)</pre><button class="copy">복사</button></div>
+    </div>
+
+    <div class="code-panel" id="panel-openai">
+      <div class="code-step">① 라이브러리 설치</div>
+      <div class="code"><pre>pip install openai python-dotenv</pre><button class="copy">복사</button></div>
+      <div class="code-step">② 같은 폴더에 .env 파일 만들고 키 넣기</div>
+      <div class="code"><pre>OPENAI_API_KEY=여기에_발급받은_키</pre><button class="copy">복사</button></div>
+      <div class="code-step">③ hello.py 만들고 실행 (python hello.py)</div>
+      <div class="code"><pre>from dotenv import load_dotenv
+from openai import OpenAI
+
+load_dotenv()  <span class="c-com"># .env에서 키를 읽어옴</span>
+client = OpenAI()
+
+response = client.responses.create(
+    model=<span class="c-str">"모델이름"</span>,  <span class="c-com"># 공식 문서 Models 페이지에서 mini 계열 최신 이름 확인 후 입력</span>
+    input=<span class="c-str">"동네 카페 인스타 소개글 3줄 써줘"</span>,
+)
+print(response.output_text)</pre><button class="copy">복사</button></div>
+    </div>
+
+    <p class="body" style="font-size:13px;color:var(--muted);margin-top:12px">* 모델 이름은 몇 달마다 바뀌어요. 에러가 나면 대부분 모델 이름 문제니까 공식 문서의 모델 목록부터 확인하세요.</p>
+  </section>
+
+  <section id="safe">
+    <h3><span class="num">6</span>사고 안 나는 법 (제일 중요)</h3>
+    <div class="box">
+      <ul class="checklist">
+        <li><b>키를 코드에 직접 쓰지 않기.</b> 위 예제처럼 .env 파일에 넣고, <b>.gitignore에 .env 추가</b>해서 깃허브에 안 올라가게.</li>
+        <li><b>키가 유출되면 바로 폐기하고 새로 발급.</b> 깃허브·캡처·채팅에 한 번이라도 노출됐으면 그 키는 버리세요. 공개 저장소에 올라간 키는 몇 분 만에 털립니다.</li>
+        <li><b>자동 충전 끄고 선불로.</b> 충전한 금액이 곧 최대 손실이라, 코드가 폭주해도 그 이상은 안 나가요.</li>
+        <li><b>사용 한도(Spend limit) 걸기.</b> 콘솔 결제 설정에서 월 한도를 걸 수 있어요.</li>
+        <li><b>웹페이지(브라우저) 코드에 키 넣지 않기.</b> 방문자가 개발자도구로 다 볼 수 있어요. 키는 서버(예: Vercel 함수)에서만.</li>
+        <li><b>반복문엔 횟수 제한.</b> "될 때까지 다시 호출" 같은 코드는 버그 한 번에 수천 번 호출돼요. 최대 횟수를 꼭 걸어두세요.</li>
+      </ul>
+    </div>
+  </section>
+
+  <div class="cta">
+    <div>
+      <p>코드 짜는 게 막막하다면?</p>
+      <p class="sub">AI 코딩 도구가 위 예제 정도는 대신 짜줘요. 모르는 건 게시판 개발 카테고리에 물어보세요.</p>
+    </div>
+    <div class="actions">
+      <a href="tools.html?category=dev" class="btn primary">코딩 AI 보기</a>
+      <a href="board.html?category=dev" class="btn">개발 게시판</a>
+    </div>
+  </div>
+</main>
+
+<footer>
+  각 회사 공식 문서(2026년 9월)를 바탕으로 정리했습니다. 구독 서비스 비교는 <a href="compare.html">ChatGPT·Claude·Gemini 비교</a>에서 볼 수 있어요. 틀린 내용은 <a href="contact.html">문의사항</a>으로 알려주세요.
+</footer>
+
+<script>
+  document.querySelectorAll('.tabs button').forEach((btn) => {
+    btn.addEventListener('click', () => {
+      document.querySelectorAll('.tabs button').forEach((b) => b.classList.toggle('active', b === btn));
+      document.querySelectorAll('.code-panel').forEach((p) => p.classList.toggle('active', p.id === 'panel-' + btn.dataset.tab));
+      if (typeof gtag === 'function') gtag('event', 'api_tab', { tab: btn.dataset.tab });
+    });
+  });
+
+  document.querySelectorAll('.copy').forEach((btn) => {
+    btn.addEventListener('click', async () => {
+      const text = btn.previousElementSibling.innerText;
+      try {
+        await navigator.clipboard.writeText(text);
+        btn.textContent = '복사됨';
+      } catch {
+        btn.textContent = '복사 실패';
+      }
+      setTimeout(() => { btn.textContent = '복사'; }, 1500);
+    });
+  });
+</script>
+</body>
+</html>
