@@ -72,7 +72,28 @@
     }
 
     .tabs.category-tabs { margin-bottom: 28px; }
-    .tabs.sort-tabs .tab { font-size: 12px; padding: 4px 12px; }
+    .toolbar {
+      max-width: 900px;
+      margin: 0 auto 12px;
+      display: flex;
+      align-items: center;
+      justify-content: space-between;
+      gap: 8px;
+      flex-wrap: wrap;
+    }
+    .toolbar .tabs { margin: 0; }
+
+    .sort-select {
+      background: var(--surface);
+      color: var(--muted);
+      border: 1px solid var(--border);
+      border-radius: 6px;
+      padding: 6px 10px;
+      font-size: 13px;
+      font-family: 'IBM Plex Mono', monospace;
+      cursor: pointer;
+    }
+    .sort-select:focus { outline: none; border-color: var(--accent); }
 
     .tab {
       padding: 6px 14px;
@@ -287,8 +308,14 @@
   <div id="advisorResult"></div>
 </section>
 
-<div class="tabs" id="targetToggle"></div>
-<div class="tabs sort-tabs" id="sortToggle"></div>
+<div class="toolbar">
+  <div class="tabs" id="targetToggle"></div>
+  <select id="sortSelect" class="sort-select" aria-label="정렬">
+    <option value="default">추천순</option>
+    <option value="new">최신 등록순</option>
+    <option value="old">오래된 등록순</option>
+  </select>
+</div>
 <div class="tabs category-tabs" id="categoryTabs"></div>
 <div id="toolSections"></div>
 
@@ -432,7 +459,9 @@
   async function loadTools() {
     const { target, category, sort } = getParams();
     renderToggle('targetToggle', [['all', '전체'], ['dev', '개발자'], ['biz', '사업자']], target, 'target');
-    renderToggle('sortToggle', [['default', '추천순'], ['new', '최신 등록순'], ['old', '오래된 등록순']], sort, 'sort');
+    const sortSelect = document.getElementById('sortSelect');
+    sortSelect.value = SORT_ORDERS[sort] ? sort : 'default';
+    sortSelect.onchange = () => { location.href = linkFor('sort', sortSelect.value === 'default' ? 'all' : sortSelect.value); };
     renderToggle('categoryTabs', [['all', '전체'], ...CATEGORIES], category, 'category');
 
     const container = document.getElementById('toolSections');
