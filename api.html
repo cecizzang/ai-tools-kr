@@ -276,7 +276,7 @@
   <section id="cost">
     <h3><span class="num">3</span>요금 감 잡기</h3>
     <p class="body">API는 <b>토큰</b> 단위로 돈을 냅니다. 토큰은 글자를 잘게 쪼갠 조각이라고 보면 돼요. 보내는 글(입력)과 받는 글(출력)의 값이 다르고, 보통 출력이 더 비쌉니다.</p>
-    <p class="body">모델마다 가격 차이가 수십 배라서, <b>처음엔 싼 모델로 시작</b>하는 게 정답이에요. (Claude는 Haiku, Gemini는 Flash, OpenAI는 mini 계열)</p>
+    <p class="body">모델마다 가격 차이가 수십 배라서, <b>처음엔 싼 모델로 시작</b>하는 게 정답이에요. (Claude는 Haiku, Gemini는 Flash, OpenAI는 Luna)</p>
     <div class="box" style="margin-top:14px">
       <table class="cost-table">
         <tr><td>혼AI 추천 상담 질문 1번 (싼 모델, 툴 목록 30개 같이 보냄)</td><td>약 5~9원</td></tr>
@@ -385,7 +385,7 @@ load_dotenv()  <span class="c-com"># .env에서 키를 읽어옴</span>
 client = OpenAI()
 
 response = client.responses.create(
-    model=<span class="c-str">"모델이름"</span>,  <span class="c-com"># 공식 문서 Models 페이지에서 mini 계열 최신 이름 확인 후 입력</span>
+    model=<span class="c-str">"gpt-5.6-luna"</span>,  <span class="c-com"># 가장 싼 모델부터. 최신 이름은 공식 문서 모델 목록 확인</span>
     input=<span class="c-str">"동네 카페 인스타 소개글 3줄 써줘"</span>,
 )
 print(response.output_text)</pre><button class="copy">복사</button></div>
