@@ -183,6 +183,13 @@
     .c-com { color: #6b6b80; }
     .c-str { color: #a5d6a7; }
 
+    .model-table { width: 100%; border-collapse: collapse; font-size: 14px; }
+    .model-table th { text-align: left; font-family: 'IBM Plex Mono', monospace; font-size: 12px; color: var(--muted); font-weight: 600; padding: 0 8px 10px 0; }
+    .model-table td { padding: 10px 8px 10px 0; border-top: 1px solid var(--border); vertical-align: top; }
+    .model-table td:first-child { font-family: 'IBM Plex Mono', monospace; font-weight: 600; white-space: nowrap; }
+    .model-table code { font-family: 'IBM Plex Mono', monospace; font-size: 13px; color: #d8d8e8; background: #0a0a0c; border: 1px solid var(--border); border-radius: 4px; padding: 1px 6px; display: inline-block; margin: 2px 0; }
+    .gpt { color: var(--gpt); } .claude { color: var(--claude); } .gemini { color: var(--gemini); }
+
     .cost-table { width: 100%; border-collapse: collapse; font-size: 14px; }
     .cost-table td { padding: 10px 0; border-bottom: 1px solid var(--border); vertical-align: top; }
     .cost-table tr:last-child td { border-bottom: none; }
@@ -211,6 +218,11 @@
       h2.page-title { font-size: 22px; }
       .vs { grid-template-columns: 1fr; }
       .code pre { font-size: 12px; }
+      .model-table thead { display: none; }
+      .model-table tr { display: block; padding: 10px 0; border-top: 1px solid var(--border); }
+      .model-table tr:first-child { border-top: none; padding-top: 0; }
+      .model-table td { display: block; border: none; padding: 2px 0; }
+      .model-table td[data-label]::before { content: attr(data-label) " · "; font-size: 12px; color: var(--muted); font-family: 'IBM Plex Mono', monospace; }
     }
   </style>
 </head>
@@ -277,6 +289,17 @@
     <h3><span class="num">3</span>요금 감 잡기</h3>
     <p class="body">API는 <b>토큰</b> 단위로 돈을 냅니다. 토큰은 글자를 잘게 쪼갠 조각이라고 보면 돼요. 보내는 글(입력)과 받는 글(출력)의 값이 다르고, 보통 출력이 더 비쌉니다.</p>
     <p class="body">모델마다 가격 차이가 수십 배라서, <b>처음엔 싼 모델로 시작</b>하는 게 정답이에요. (Claude는 Haiku, Gemini는 Flash, OpenAI는 Luna)</p>
+    <div class="box" style="margin-top:14px">
+      <table class="model-table">
+        <thead><tr><th></th><th>싸고 빠른 모델 (연습·대량 처리)</th><th>성능 좋은 모델</th></tr></thead>
+        <tbody>
+          <tr><td class="claude">Claude</td><td data-label="싸고 빠른"><code>claude-haiku-4-5</code></td><td data-label="성능"><code>claude-sonnet-5-5</code><br /><code>claude-opus-5-5</code></td></tr>
+          <tr><td class="gpt">OpenAI</td><td data-label="싸고 빠른"><code>gpt-5.6-luna</code></td><td data-label="성능"><code>gpt-5.6-sol</code></td></tr>
+          <tr><td class="gemini">Gemini</td><td data-label="싸고 빠른"><code>gemini-3.8-flash</code><br /><code>gemini-3.5-flash-lite</code></td><td data-label="성능"><code>gemini-3.1-pro-preview</code></td></tr>
+        </tbody>
+      </table>
+    </div>
+    <p class="body" style="font-size:13px;color:var(--muted)">* 코드에 넣는 정확한 모델 이름이에요. Gemini는 Flash 계열까지 무료 사용량이 있고, Pro는 유료만 돼요.</p>
     <div class="box" style="margin-top:14px">
       <table class="cost-table">
         <tr><td>혼AI 추천 상담 질문 1번 (싼 모델, 툴 목록 30개 같이 보냄)</td><td>약 5~9원</td></tr>
@@ -366,7 +389,7 @@ load_dotenv()  <span class="c-com"># .env에서 키를 읽어옴</span>
 client = genai.Client()
 
 response = client.models.generate_content(
-    model=<span class="c-str">"gemini-3.5-flash"</span>,  <span class="c-com"># 무료로 쓸 수 있는 Flash 계열. 최신 이름은 AI Studio에서 확인</span>
+    model=<span class="c-str">"gemini-3.8-flash"</span>,  <span class="c-com"># 최신 Flash. 무료 사용량 안에서 쓸 수 있음</span>
     contents=<span class="c-str">"동네 카페 인스타 소개글 3줄 써줘"</span>,
 )
 print(response.text)</pre><button class="copy">복사</button></div>
