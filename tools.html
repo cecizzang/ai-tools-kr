@@ -10,6 +10,11 @@
     gtag('js', new Date());
     gtag('config', 'G-6N0XZCCW0J');
   </script>
+  <meta name="description" content="1인 사업자·소상공인·1인 개발자에게 쓸모 있는 AI 툴을 카테고리별로 정리했습니다. 한국어 지원 여부와 가격, AI 추천 상담까지." />
+  <meta property="og:title" content="AI 툴 모음 - 혼AI" />
+  <meta property="og:description" content="1인 사업자·소상공인·1인 개발자에게 쓸모 있는 AI 툴을 카테고리별로 정리했습니다. 한국어 지원 여부와 가격, AI 추천 상담까지." />
+  <meta property="og:type" content="website" />
+  <meta property="og:locale" content="ko_KR" />
   <title>AI 툴 모음 - 혼AI</title>
   <style>
     @import url('https://fonts.googleapis.com/css2?family=IBM+Plex+Mono:wght@400;600&family=Inter:wght@400;500;600;700&display=swap');
@@ -284,6 +289,11 @@
       .advisor-row { flex-direction: column; }
       .advisor-row button { padding: 10px 16px; }
     }
+    /* 공통: 한국어가 단어 중간에서 끊기지 않게 + 아이폰에서 입력창 누를 때 화면 확대 방지 */
+    body { word-break: keep-all; overflow-wrap: anywhere; }
+    @media (max-width: 600px) {
+      input, textarea, select { font-size: 16px !important; }
+    }
   </style>
 </head>
 <body>
@@ -299,7 +309,7 @@
   <form id="advisorForm" autocomplete="off">
     <label for="advisorInput">어떤 일에 AI를 쓰고 싶으세요?</label>
     <div class="advisor-row">
-      <input id="advisorInput" type="text" maxlength="300" placeholder="예: 가게 인스타에 올릴 홍보 이미지를 빠르게 만들고 싶어요" />
+      <input id="advisorInput" type="text" maxlength="300" placeholder="예: 가게 인스타 홍보 이미지를 빨리 만들고 싶어요" />
       <button id="advisorBtn" type="submit">추천받기</button>
     </div>
     <input class="advisor-hp" type="text" name="website" id="advisorHp" tabindex="-1" aria-hidden="true" />

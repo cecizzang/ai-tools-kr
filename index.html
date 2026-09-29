@@ -333,6 +333,9 @@
     }
 
     .company-body.clamped {
+      /* 아래 패딩 영역으로 6번째 줄이 삐져나와 보이던 문제 → 잘리는 상자에선 아래 패딩을 없애고 바깥 여백으로 대신 */
+      padding-bottom: 0;
+      margin-bottom: 20px;
       display: -webkit-box;
       -webkit-line-clamp: 5;
       -webkit-box-orient: vertical;
@@ -375,6 +378,11 @@
 
     .expand-btn:hover { text-decoration: underline; }
 
+    /* 공통: 한국어가 단어 중간에서 끊기지 않게 + 아이폰에서 입력창 누를 때 화면 확대 방지 */
+    body { word-break: keep-all; overflow-wrap: anywhere; }
+    @media (max-width: 600px) {
+      input, textarea, select { font-size: 16px !important; }
+    }
   </style>
 </head>
 <body>

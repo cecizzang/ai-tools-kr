@@ -10,6 +10,11 @@
     gtag('js', new Date());
     gtag('config', 'G-6N0XZCCW0J');
   </script>
+  <meta name="description" content="혼AI 버그 제보, 제휴 문의, 제안은 여기로 남겨주세요." />
+  <meta property="og:title" content="문의사항 - 혼AI" />
+  <meta property="og:description" content="혼AI 버그 제보, 제휴 문의, 제안은 여기로 남겨주세요." />
+  <meta property="og:type" content="website" />
+  <meta property="og:locale" content="ko_KR" />
   <title>문의사항 - 혼AI</title>
   <style>
     @import url('https://fonts.googleapis.com/css2?family=IBM+Plex+Mono:wght@400;600&family=Inter:wght@400;500;600;700&display=swap');
@@ -157,6 +162,11 @@
     }
 
     .hp-field { position: absolute; left: -9999px; top: -9999px; }
+    /* 공통: 한국어가 단어 중간에서 끊기지 않게 + 아이폰에서 입력창 누를 때 화면 확대 방지 */
+    body { word-break: keep-all; overflow-wrap: anywhere; }
+    @media (max-width: 600px) {
+      input, textarea, select { font-size: 16px !important; }
+    }
   </style>
 </head>
 <body>

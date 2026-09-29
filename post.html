@@ -262,6 +262,11 @@
       max-height: 100%;
       border-radius: 6px;
     }
+    /* 공통: 한국어가 단어 중간에서 끊기지 않게 + 아이폰에서 입력창 누를 때 화면 확대 방지 */
+    body { word-break: keep-all; overflow-wrap: anywhere; }
+    @media (max-width: 600px) {
+      input, textarea, select { font-size: 16px !important; }
+    }
   </style>
 </head>
 <body>
