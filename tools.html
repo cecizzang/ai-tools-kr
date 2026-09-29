@@ -272,6 +272,16 @@
       font-family: 'IBM Plex Mono', monospace;
     }
 
+    .advisor-compare {
+      display: inline-block;
+      margin-top: 12px;
+      font-size: 12px;
+      color: var(--accent);
+      font-family: 'IBM Plex Mono', monospace;
+      text-decoration: none;
+    }
+    .advisor-compare:hover { text-decoration: underline; }
+
     .advisor-hp { position: absolute; left: -9999px; width: 1px; height: 1px; opacity: 0; }
 
     .advisor-message { font-size: 14px; line-height: 1.6; margin: 16px 0 12px; }
@@ -316,6 +326,7 @@
     <p class="advisor-note">AI가 혼AI에 등록된 툴 중에서 골라 드려요 · 하루 10회 · 질문 내용은 서비스 개선을 위해 익명으로 저장됩니다</p>
   </form>
   <div id="advisorResult"></div>
+  <a href="compare.html" class="advisor-compare">처음이라면: ChatGPT · Claude · Gemini 비교부터 보기 →</a>
 </section>
 
 <div class="toolbar">
