@@ -123,6 +123,7 @@
     .box li::before { content: '·'; position: absolute; left: 3px; color: var(--muted); }
 
     .vs { display: grid; grid-template-columns: 1fr 1fr; gap: 12px; }
+    .vs .box + .box { margin-top: 0; }  /* 세로로 쌓을 때 쓰는 간격이 나란히 놓인 두 번째 박스를 밀어내던 문제 */
     .vs .box h4 { font-family: 'IBM Plex Mono', monospace; font-size: 14px; margin-bottom: 10px; }
 
     .warn {
