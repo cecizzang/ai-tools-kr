@@ -121,6 +121,8 @@
       margin-bottom: 20px;
     }
 
+    .post-body a, .comment-body a { color: var(--accent); }
+
     .not-found {
       max-width: 900px;
       margin: 60px auto;
@@ -301,8 +303,9 @@
   </form>
 </div>
 
+<script src="linkify.js"></script>
 <script>
-  const SUPABASE_URL = 'https://clpwrmxegqvzzcqcxdsa.supabase.co';
+  const SUPABASE_URL ='https://clpwrmxegqvzzcqcxdsa.supabase.co';
   const SUPABASE_ANON_KEY = 'sb_publishable_PiSGtCuULXpdHlOgYdWK0A_jmTgqIXQ';
   const CATEGORY_LABELS = { notice: '공지사항', free: '일반', dev: '개발', business: '사장님 모임' };
   const POST_ID = new URLSearchParams(location.search).get('id');
@@ -342,7 +345,7 @@
 
     const bodyEl = document.createElement('div');
     bodyEl.className = 'post-body';
-    bodyEl.textContent = post.body;
+    linkify(bodyEl, post.body);
 
     const delBtn = document.createElement('button');
     delBtn.className = 'btn secondary';
@@ -438,7 +441,7 @@
 
     const body = document.createElement('div');
     body.className = 'comment-body';
-    body.textContent = c.body;
+    linkify(body, c.body);
 
     row.appendChild(meta);
     row.appendChild(body);
