@@ -10,6 +10,10 @@ const COMPANIES = [
 
 const MIN_SUMMARY_LENGTH = 20;
 const MAX_ATTEMPTS = 2;
+// Keep in sync with config.maxDuration above (Vercel reads that literal statically).
+const MAX_DURATION_MS = 60_000;
+// A search-backed Haiku call takes ~15–25s, so don't start a retry with less than this left.
+const MIN_RETRY_TIME_LEFT_MS = 25_000;
 
 const META_PHRASES = [
   '추가 검색', '검색이 필요', '확인이 필요', '확인하기 위해', '검색 결과', '검색해 보',
@@ -20,6 +24,8 @@ const ENGLISH_FUNCTION_WORDS = /\b(the|and|of|is|are|was|were|has|have|with|for|
 
 const KST_OFFSET_MS = 9 * 60 * 60 * 1000;
 const DAY_MS = 24 * 60 * 60 * 1000;
+// A yearless date further ahead than this is taken as last year's (e.g. "(12/28)" seen in January).
+const LAST_YEAR_THRESHOLD_MS = 60 * DAY_MS;
 
 // "9월 2026년" → "2026년 9월"
 export function fixDateOrder(text) {
@@ -34,10 +40,12 @@ export function findSummaryProblem(text, now = new Date()) {
   const englishWords = text.match(ENGLISH_FUNCTION_WORDS) || [];
   if (englishWords.length >= 2) return `english words: ${englishWords.join(',')}`;
 
-  // Dates without a year are read as this year (KST); anything after KST tomorrow is rejected.
+  // Dates without a year are read as this year (KST). Anything after KST tomorrow is rejected,
+  // unless it's more than 60 days ahead — then it's really last year's date and passes.
   const kstNow = new Date(now.getTime() + KST_OFFSET_MS);
   const year = kstNow.getUTCFullYear();
-  const limit = Date.UTC(year, kstNow.getUTCMonth(), kstNow.getUTCDate()) + DAY_MS;
+  const today = Date.UTC(year, kstNow.getUTCMonth(), kstNow.getUTCDate());
+  const limit = today + DAY_MS;
 
   const dates = [];
   for (const m of text.matchAll(/\((\d{1,2})\/(\d{1,2})(?:,\s*(\d{1,2})\/(\d{1,2}))?\)/g)) {
@@ -48,7 +56,8 @@ export function findSummaryProblem(text, now = new Date()) {
     dates.push([m[1], m[2]]);
   }
   for (const [month, day] of dates) {
-    if (Date.UTC(year, Number(month) - 1, Number(day)) > limit) return `future date: ${month}/${day}`;
+    const date = Date.UTC(year, Number(month) - 1, Number(day));
+    if (date > limit && date - today <= LAST_YEAR_THRESHOLD_MS) return `future date: ${month}/${day}`;
   }
 
   return null;
@@ -174,11 +183,18 @@ async function saveCompanyUpdate(company, summary) {
   }
 }
 
-// Retries a bad or failed summary once. Supabase errors aren't retried, and if every
-// attempt fails nothing is saved, so the previous summary stays in place.
-async function updateCompany(company) {
+// Retries a bad or failed summary once, if there's still time. Supabase errors aren't retried,
+// and if every attempt fails nothing is saved, so the previous summary stays in place.
+async function updateCompany(company, startedAt) {
   let lastError;
   for (let attempt = 1; attempt <= MAX_ATTEMPTS; attempt++) {
+    if (attempt > 1) {
+      const timeLeft = MAX_DURATION_MS - (Date.now() - startedAt);
+      if (timeLeft < MIN_RETRY_TIME_LEFT_MS) {
+        console.error(`[${company.id}] skipping retry: ${timeLeft}ms left`);
+        break;
+      }
+    }
     let summary;
     try {
       summary = await fetchCompanySummary(company);
@@ -199,8 +215,9 @@ export default async function handler(req, res) {
     return res.status(401).json({ error: 'Unauthorized' });
   }
 
+  const startedAt = Date.now();
   const results = await Promise.allSettled(
-    COMPANIES.map(updateCompany)
+    COMPANIES.map((company) => updateCompany(company, startedAt))
   );
 
   const updated = [];
