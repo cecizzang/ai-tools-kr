@@ -1,7 +1,11 @@
+import { findSummaryProblem } from './update-companies.js';
+
 export const config = { maxDuration: 60 };
 
 // 한 번 실행에 최대 이만큼만 신규 제안 — 비용 통제 + 스팸성 대량 삽입 방지.
 const MAX_NEW_TOOLS_PER_RUN = 5;
+// released가 이보다 오래된 툴은 "최근 툴"이 아니므로 저장하지 않는다.
+const MAX_RELEASED_AGE_MONTHS = 12;
 
 const CATEGORY_LABELS = {
   chat: '대화형 AI', writing: '글쓰기·번역', image: '이미지·디자인',
@@ -26,8 +30,9 @@ const PROPOSE_TOOLS_TOOL = {
             price: { type: 'string', enum: ['free', 'freemium', 'paid'] },
             korean: { type: 'string', enum: ['full', 'partial', 'none'], description: '한국어 UI/기능 지원 수준' },
             target: { type: 'string', enum: ['dev', 'biz', 'both'], description: '1인 개발자용인지 소상공인/1인사업자용인지' },
+            released: { type: 'string', description: '출시 또는 마지막 주요 업데이트 연월. YYYY-MM 형식 (예: 2026-09)' },
           },
-          required: ['name', 'url', 'description', 'category', 'price', 'korean', 'target'],
+          required: ['name', 'url', 'description', 'category', 'price', 'korean', 'target', 'released'],
         },
       },
     },
@@ -54,6 +59,8 @@ function buildSystemPrompt(todayKR, descriptionExamples) {
 - 실제로 검색으로 확인한, 접근 가능한 공식 URL만 써라. URL을 추측하지 마라.
 - description은 한국어 40자 안팎의 한 문장으로, 과장이나 광고성 문구 없이 무슨 기능을 하는 툴인지만 정확히 써라.${examples}
 - 가격 정보(price)는 검색으로 확인 안 되면 'freemium'으로 보수적으로 표시해라. 확신 없는 걸 'free'로 단정하지 마라.
+- released에는 검색으로 확인한 출시 또는 마지막 주요 업데이트 연월을 YYYY-MM 형식으로 써라.
+  연월을 확인하지 못했거나 ${MAX_RELEASED_AGE_MONTHS}개월보다 오래된 툴은 제안하지 마라.
 - category/price/korean/target은 반드시 주어진 값 중 하나만 써라.
 - 확신이 서는 후보가 ${MAX_NEW_TOOLS_PER_RUN}개보다 적으면 억지로 채우지 말고 그만큼만 반환해라. 없으면 빈 배열을 반환해라.
 - 반드시 propose_tools 도구를 호출해서만 응답해라.`;
@@ -115,6 +122,27 @@ function urlKey(url) {
   if (!SHARED_HOSTS.has(host)) return host;
   const segments = parsed.pathname.split('/').filter(Boolean).slice(0, 2);
   return [host, ...segments].join('/');
+}
+
+// 저장하면 안 되는 제안이면 이유 문자열을, 문제없으면 null을 돌려준다.
+export function findToolProblem(tool, now = new Date()) {
+  const released = String(tool.released ?? '');
+  const m = released.match(/^(\d{4})-(0[1-9]|1[0-2])$/);
+  if (!m) return `released 형식 오류: ${released}`;
+
+  const [nowYear, nowMonth] = now
+    .toLocaleDateString('sv-SE', { timeZone: 'Asia/Seoul' })
+    .split('-')
+    .map(Number);
+  const ageMonths = (nowYear * 12 + nowMonth) - (Number(m[1]) * 12 + Number(m[2]));
+  if (ageMonths > MAX_RELEASED_AGE_MONTHS) return `released ${ageMonths}개월 전: ${released}`;
+  if (ageMonths < 0) return `released 미래 연월: ${released}`;
+
+  // 회사 소식 요약과 같은 기준으로 메타 문구·영어 섞인 문장을 걸러낸다.
+  const problem = findSummaryProblem(String(tool.description ?? ''), now);
+  if (problem) return `description ${problem}`;
+
+  return null;
 }
 
 function todayKST() {
@@ -273,6 +301,7 @@ export default async function handler(req, res) {
 
     const inserted = [];
     const skippedDuplicates = [];
+    const skippedInvalid = [];
     const failed = [];
 
     for (const tool of proposed.slice(0, MAX_NEW_TOOLS_PER_RUN)) {
@@ -281,6 +310,13 @@ export default async function handler(req, res) {
 
       if (isDuplicate) {
         skippedDuplicates.push(tool.name);
+        continue;
+      }
+
+      const problem = findToolProblem(tool);
+      if (problem) {
+        console.error(`discover-tools: skipped ${tool.name}: ${problem}`);
+        skippedInvalid.push({ name: tool.name, reason: problem });
         continue;
       }
 
@@ -296,7 +332,7 @@ export default async function handler(req, res) {
       }
     }
 
-    return res.status(200).json({ inserted, skippedDuplicates, failed });
+    return res.status(200).json({ inserted, skippedDuplicates, skippedInvalid, failed });
   } catch (e) {
     console.error(`discover-tools: ${e.message}`);
     return res.status(500).json({ error: e.message });
