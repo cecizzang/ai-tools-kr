@@ -9,6 +9,8 @@ const COMPANIES = [
 ];
 
 const MIN_SUMMARY_LENGTH = 20;
+const MAX_SUMMARY_LINES = 3;
+const DUPLICATE_WORD_OVERLAP = 0.6;
 const MAX_ATTEMPTS = 2;
 // Keep in sync with config.maxDuration above (Vercel reads that literal statically).
 const MAX_DURATION_MS = 60_000;
@@ -30,6 +32,59 @@ const LAST_YEAR_THRESHOLD_MS = 60 * DAY_MS;
 // "9월 2026년" → "2026년 9월"
 export function fixDateOrder(text) {
   return text.replace(/(?<!\d)(\d{1,2})월\s*(\d{4})년/g, '$2년 $1월');
+}
+
+const DATE_TAG = /\(\d{1,2}\/\d{1,2}(?:,\s*\d{1,2}\/\d{1,2})?\)/g;
+
+// Words of a line for duplicate detection: the (M/D) date tag and punctuation
+// are ignored so "…강하다. (9/2)" and "…강하다" compare as the same words.
+function lineWords(line) {
+  return new Set(
+    line
+      .replace(DATE_TAG, ' ')
+      .toLowerCase()
+      .split(/\s+/)
+      .map((w) => w.replace(/[^\p{L}\p{N}]/gu, ''))
+      .filter(Boolean)
+  );
+}
+
+// English/number tokens of a line (model names, versions) as a sorted key.
+// Dates — the (M/D) tag and "2026년 9월 2일" — are left out, so two lines
+// about the same model match even when only one of them spells out the date.
+function lineModelKey(line) {
+  const tokens = (
+    line
+      .replace(DATE_TAG, ' ')
+      .replace(/\d+(?:년|월|일)/g, ' ')
+      .toLowerCase()
+      .match(/[a-z0-9.]+/g) || []
+  )
+    .map((t) => t.replace(/^\.+|\.+$/g, ''))
+    .filter(Boolean);
+  return [...new Set(tokens)].sort().join(' ');
+}
+
+// A line is a duplicate only if it shares 60% of its words with an earlier
+// line (measured against the shorter one) AND names the same models/versions,
+// so "Claude Sonnet 5.5 출시" and "Claude Opus 5.5 출시" both stay.
+function isDuplicateLine(a, b) {
+  if (a.modelKey !== b.modelKey) return false;
+  const smaller = Math.min(a.words.size, b.words.size);
+  if (smaller === 0) return false;
+  let shared = 0;
+  for (const w of a.words) if (b.words.has(w)) shared++;
+  return shared >= smaller * DUPLICATE_WORD_OVERLAP;
+}
+
+export function cleanSummary(text) {
+  const kept = [];
+  for (const line of text.split('\n').map((l) => l.trim()).filter(Boolean)) {
+    const entry = { line, words: lineWords(line), modelKey: lineModelKey(line) };
+    if (kept.some((k) => isDuplicateLine(entry, k))) continue;
+    kept.push(entry);
+  }
+  return kept.slice(0, MAX_SUMMARY_LINES).map((k) => k.line).join('\n');
 }
 
 // Returns a reason string if the summary should be rejected, or null if it's fine.
@@ -135,13 +190,7 @@ async function fetchCompanySummary(company, now = new Date()) {
   let textBlocks = data.content.slice(lastSearchIndex + 1).filter((b) => b.type === 'text');
   if (textBlocks.length === 0) textBlocks = data.content.filter((b) => b.type === 'text');
 
-  const text = fixDateOrder(
-    textBlocks
-      .map((b) => b.text)
-      .join('')
-      .replace(/\n{3,}/g, '\n')
-      .trim()
-  );
+  const text = cleanSummary(fixDateOrder(textBlocks.map((b) => b.text).join('')));
 
   console.log(`[${company.id}] content blocks=${data.content.map((b) => b.type).join(',')} extracted text length=${text.length}`);
 

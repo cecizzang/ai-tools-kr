@@ -12,7 +12,7 @@
   </script>
   <meta name="description" content="AI API가 뭔지, 구독이랑 뭐가 다른지, OpenAI·Claude·Gemini API 키 발급부터 첫 호출 예제, 요금 폭탄 안 맞는 법까지. 1인 개발자·사업자를 위한 AI API 입문 가이드." />
   <meta property="og:title" content="AI API 처음 쓰는 법 - 혼AI" />
-  <meta property="og:description" content="키 발급부터 첫 호출, 요금 감 잡기, 사고 안 나는 법까지 (2026년 9월 기준)" />
+  <meta property="og:description" content="키 발급부터 첫 호출, 요금 감 잡기, 사고 안 나는 법까지 (2026년 10월 기준)" />
   <meta property="og:type" content="article" />
   <meta property="og:locale" content="ko_KR" />
   <title>AI API 처음 쓰는 법: 키 발급부터 첫 호출까지 - 혼AI</title>
@@ -240,7 +240,7 @@
 <main>
   <h2 class="page-title">AI API 처음 쓰는 법<br />키 발급부터 첫 호출까지</h2>
   <p class="lead">채팅창에서 쓰던 AI를 내 프로그램·자동화에 붙이고 싶다면 API가 필요해요. 개념부터 요금 감, 첫 코드, 그리고 제일 중요한 "요금 폭탄 안 맞는 법"까지 정리했습니다.</p>
-  <span class="asof">2026년 9월 기준 · 모델 이름과 요금은 자주 바뀌어요</span>
+  <span class="asof">2026년 10월 기준 · 모델 이름과 요금은 자주 바뀌어요</span>
 
   <nav class="toc">
     <a href="#what">1. API가 뭔데</a>
@@ -295,7 +295,7 @@
         <thead><tr><th></th><th>싸고 빠른 모델 (연습·대량 처리)</th><th>성능 좋은 모델</th></tr></thead>
         <tbody>
           <tr><td class="claude">Claude</td><td data-label="싸고 빠른"><code>claude-haiku-4-5</code></td><td data-label="성능"><code>claude-sonnet-5-5</code><br /><code>claude-opus-5-5</code></td></tr>
-          <tr><td class="gpt">OpenAI</td><td data-label="싸고 빠른"><code>gpt-5.6-luna</code></td><td data-label="성능"><code>gpt-5.6-sol</code></td></tr>
+          <tr><td class="gpt">OpenAI</td><td data-label="싸고 빠른"><code>gpt-6-luna</code></td><td data-label="성능"><code>gpt-6.1-sol</code><br /><code>gpt-6-astra</code></td></tr>
           <tr><td class="gemini">Gemini</td><td data-label="싸고 빠른"><code>gemini-3.8-flash</code><br /><code>gemini-3.5-flash-lite</code></td><td data-label="성능"><code>gemini-3.1-pro-preview</code></td></tr>
         </tbody>
       </table>
@@ -409,7 +409,7 @@ load_dotenv()  <span class="c-com"># .env에서 키를 읽어옴</span>
 client = OpenAI()
 
 response = client.responses.create(
-    model=<span class="c-str">"gpt-5.6-luna"</span>,  <span class="c-com"># 가장 싼 모델부터. 최신 이름은 공식 문서 모델 목록 확인</span>
+    model=<span class="c-str">"gpt-6-luna"</span>,  <span class="c-com"># 가장 싼 모델부터. 최신 이름은 공식 문서 모델 목록 확인</span>
     input=<span class="c-str">"동네 카페 인스타 소개글 3줄 써줘"</span>,
 )
 print(response.output_text)</pre><button class="copy">복사</button></div>
@@ -445,7 +445,7 @@ print(response.output_text)</pre><button class="copy">복사</button></div>
 </main>
 
 <footer>
-  각 회사 공식 문서(2026년 9월)를 바탕으로 정리했습니다. 구독 서비스 비교는 <a href="compare.html">ChatGPT·Claude·Gemini 비교</a>에서 볼 수 있어요. 틀린 내용은 <a href="contact.html">문의사항</a>으로 알려주세요.
+  각 회사 공식 문서(2026년 10월)를 바탕으로 정리했습니다. 구독 서비스 비교는 <a href="compare.html">ChatGPT·Claude·Gemini 비교</a>에서 볼 수 있어요. 틀린 내용은 <a href="contact.html">문의사항</a>으로 알려주세요.
 </footer>
 
 <script>
