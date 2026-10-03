@@ -123,6 +123,16 @@
 
     .post-body a, .comment-body a { color: var(--accent); }
 
+    .post-actions { display: flex; gap: 8px; }
+
+    .post-edit { display: flex; flex-direction: column; gap: 10px; }
+    .post-edit textarea { min-height: 220px; line-height: 1.7; }
+    .post-edit-note {
+      font-size: 11px;
+      color: var(--muted);
+      font-family: 'IBM Plex Mono', monospace;
+    }
+
     .not-found {
       max-width: 900px;
       margin: 60px auto;
@@ -341,7 +351,7 @@
 
     const metaEl = document.createElement('div');
     metaEl.className = 'post-meta';
-    metaEl.textContent = `${post.nickname} · ${formatRelativeTime(post.created_at)}`;
+    metaEl.textContent = `${post.nickname} · ${formatRelativeTime(post.created_at)}${post.updated_at ? ' (수정됨)' : ''}`;
 
     const bodyEl = document.createElement('div');
     bodyEl.className = 'post-body';
@@ -351,6 +361,16 @@
     delBtn.className = 'btn secondary';
     delBtn.textContent = '삭제';
     delBtn.onclick = () => deletePost(post.id);
+
+    const editBtn = document.createElement('button');
+    editBtn.className = 'btn secondary';
+    editBtn.textContent = '수정';
+    editBtn.onclick = () => startEditPost(post);
+
+    const actions = document.createElement('div');
+    actions.className = 'post-actions';
+    actions.appendChild(editBtn);
+    actions.appendChild(delBtn);
 
     wrap.appendChild(catEl);
     wrap.appendChild(titleEl);
@@ -371,7 +391,92 @@
       wrap.appendChild(gallery);
     }
 
-    wrap.appendChild(delBtn);
+    wrap.appendChild(actions);
+  }
+
+  // 비밀번호를 먼저 받고 제목·본문 편집 폼으로 바꾼다. 비밀번호 확인은 저장할 때 서버가 한다.
+  function startEditPost(post) {
+    let password = prompt('비밀번호를 입력하세요');
+    if (!password) return;
+
+    const wrap = document.getElementById('postDetail');
+    wrap.textContent = '';
+
+    const form = document.createElement('form');
+    form.className = 'post-edit';
+
+    const titleInput = document.createElement('input');
+    titleInput.maxLength = 60;
+    titleInput.placeholder = '제목 (2~60자)';
+    titleInput.required = true;
+    titleInput.value = post.title;
+
+    const bodyInput = document.createElement('textarea');
+    bodyInput.maxLength = 5000;
+    bodyInput.placeholder = '본문 (2~5000자)';
+    bodyInput.required = true;
+    bodyInput.value = post.body;
+
+    const note = document.createElement('div');
+    note.className = 'post-edit-note';
+    note.textContent = '제목과 본문만 수정할 수 있어요 (카테고리·닉네임·이미지는 그대로)';
+
+    const errEl = document.createElement('div');
+    errEl.className = 'form-error';
+
+    const saveBtn = document.createElement('button');
+    saveBtn.type = 'submit';
+    saveBtn.className = 'btn';
+    saveBtn.textContent = '저장';
+
+    const cancelBtn = document.createElement('button');
+    cancelBtn.type = 'button';
+    cancelBtn.className = 'btn secondary';
+    cancelBtn.textContent = '취소';
+    cancelBtn.onclick = () => renderPost(post);
+
+    const actions = document.createElement('div');
+    actions.className = 'post-actions';
+    actions.appendChild(saveBtn);
+    actions.appendChild(cancelBtn);
+
+    form.appendChild(titleInput);
+    form.appendChild(bodyInput);
+    form.appendChild(note);
+    form.appendChild(errEl);
+    form.appendChild(actions);
+
+    form.addEventListener('submit', async (e) => {
+      e.preventDefault();
+      errEl.textContent = '';
+      saveBtn.disabled = true;
+      try {
+        const res = await fetch('/api/board/update', {
+          method: 'POST',
+          headers: { 'Content-Type': 'application/json' },
+          body: JSON.stringify({ id: post.id, password, title: titleInput.value, body: bodyInput.value }),
+        });
+        const data = await res.json().catch(() => ({}));
+        if (res.ok) { loadPost(); return; }
+
+        errEl.textContent = data.error || '수정에 실패했습니다.';
+        if (res.status === 403) {
+          // 쓰던 내용은 그대로 두고 비밀번호만 다시 받는다.
+          const retry = prompt('비밀번호가 일치하지 않습니다. 다시 입력하세요');
+          if (retry) {
+            password = retry;
+            errEl.textContent = '비밀번호를 다시 입력했어요. 저장을 눌러 주세요.';
+          }
+        }
+      } catch (err) {
+        errEl.textContent = '수정에 실패했습니다.';
+      } finally {
+        saveBtn.disabled = false;
+      }
+    });
+
+    wrap.appendChild(form);
+    titleInput.focus();
   }
 
   function openLightbox(url) {
@@ -390,11 +495,16 @@
   async function loadPost() {
     if (!POST_ID) { showNotFound(); return; }
 
+    const fetchPost = (columns) => fetch(
+      `${SUPABASE_URL}/rest/v1/posts?id=eq.${encodeURIComponent(POST_ID)}&select=${columns}`,
+      { headers: { apikey: SUPABASE_ANON_KEY, Authorization: `Bearer ${SUPABASE_ANON_KEY}` } }
+    );
+    const columns = 'id,category,nickname,title,body,image_urls,created_at';
+
     try {
-      const res = await fetch(
-        `${SUPABASE_URL}/rest/v1/posts?id=eq.${encodeURIComponent(POST_ID)}&select=id,category,nickname,title,body,image_urls,created_at`,
-        { headers: { apikey: SUPABASE_ANON_KEY, Authorization: `Bearer ${SUPABASE_ANON_KEY}` } }
-      );
+      let res = await fetchPost(`${columns},updated_at`);
+      // updated_at 컬럼이 아직 없거나 읽기 권한이 없어도(supabase/board-edit.sql 실행 전) 글은 보여야 한다.
+      if (!res.ok) res = await fetchPost(columns);
       if (!res.ok) throw new Error(`status ${res.status}`);
       const rows = await res.json();
       const post = rows[0];
