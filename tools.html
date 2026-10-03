@@ -265,6 +265,13 @@
 
     .advisor-row button:disabled { opacity: 0.5; cursor: default; }
 
+    .advisor-row button.secondary {
+      background: none;
+      color: var(--muted);
+      border: 1px solid var(--border);
+    }
+    .advisor-row button.secondary:hover { color: var(--text); border-color: var(--muted); }
+
     .advisor-note {
       font-size: 11px;
       color: var(--muted);
@@ -321,6 +328,7 @@
     <div class="advisor-row">
       <input id="advisorInput" type="text" maxlength="300" placeholder="예: 가게 인스타 홍보 이미지를 빨리 만들고 싶어요" />
       <button id="advisorBtn" type="submit">추천받기</button>
+      <button id="advisorReset" type="button" class="secondary" hidden>처음부터</button>
     </div>
     <input class="advisor-hp" type="text" name="website" id="advisorHp" tabindex="-1" aria-hidden="true" />
     <p class="advisor-note">AI가 혼AI에 등록된 툴 중에서 골라 드려요 · 하루 10회 · 질문 내용은 서비스 개선을 위해 익명으로 저장됩니다</p>
@@ -516,6 +524,20 @@
     }
   }
 
+  // 직전 상담(질문 + 추천된 툴 이름). 메모리에만 두므로 새로고침하면 사라진다.
+  let advisorPrevious = null;
+  const ADVISOR_PLACEHOLDER = document.getElementById('advisorInput').placeholder;
+
+  function resetAdvisor() {
+    advisorPrevious = null;
+    const input = document.getElementById('advisorInput');
+    input.value = '';
+    input.placeholder = ADVISOR_PLACEHOLDER;
+    document.getElementById('advisorResult').textContent = '';
+    document.getElementById('advisorReset').hidden = true;
+    input.focus();
+  }
+
   async function askAdvisor(e) {
     e.preventDefault();
     const input = document.getElementById('advisorInput');
@@ -535,7 +557,11 @@
       const res = await fetch('/api/advisor/ask', {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({ question, honeypot: document.getElementById('advisorHp').value }),
+        body: JSON.stringify({
+          question,
+          honeypot: document.getElementById('advisorHp').value,
+          ...(advisorPrevious ? { previous: advisorPrevious } : {}),
+        }),
       });
       const data = await res.json().catch(() => ({}));
       if (!res.ok) throw new Error(data.error || '추천을 불러오지 못했어요.');
@@ -556,7 +582,16 @@
         });
         result.appendChild(grid);
       }
-      if (typeof gtag === 'function') gtag('event', 'advisor_ask', { picks: (data.picks || []).length });
+      if (typeof gtag === 'function') gtag('event', 'advisor_ask', { picks: (data.picks || []).length, followup: !!advisorPrevious });
+
+      // 다음 질문이 이어지는 질문으로 해석되도록 이번 상담을 기억해 둔다.
+      advisorPrevious = {
+        question,
+        picks: (Array.isArray(data.picks) ? data.picks : []).map((t) => t.name),
+      };
+      input.value = '';
+      input.placeholder = '이어서 물어보세요 (예: 무료인 것만, 더 쉬운 것)';
+      document.getElementById('advisorReset').hidden = false;
     } catch (err) {
       msg.classList.add('error');
       msg.textContent = err.message;
@@ -568,6 +603,7 @@
   }
 
   document.getElementById('advisorForm').addEventListener('submit', askAdvisor);
+  document.getElementById('advisorReset').addEventListener('click', resetAdvisor);
 
   loadTools();
 </script>
