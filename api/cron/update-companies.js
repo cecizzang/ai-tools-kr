@@ -9,6 +9,41 @@ const COMPANIES = [
 ];
 
 const MIN_SUMMARY_LENGTH = 20;
+const MAX_SUMMARY_LINES = 3;
+const DUPLICATE_WORD_OVERLAP = 0.6;
+
+// Words of a line for duplicate detection: the (M/D) date tag and punctuation
+// are ignored so "…강하다. (9/2)" and "…강하다" compare as the same words.
+function lineWords(line) {
+  return new Set(
+    line
+      .replace(/\(\d{1,2}\/\d{1,2}\)/g, ' ')
+      .toLowerCase()
+      .split(/\s+/)
+      .map((w) => w.replace(/[^\p{L}\p{N}]/gu, ''))
+      .filter(Boolean)
+  );
+}
+
+// Overlap is measured against the shorter line, so a line that restates an
+// earlier one with extra detail still counts as a duplicate.
+function isDuplicateLine(words, earlierWords) {
+  const smaller = Math.min(words.size, earlierWords.size);
+  if (smaller === 0) return false;
+  let shared = 0;
+  for (const w of words) if (earlierWords.has(w)) shared++;
+  return shared >= smaller * DUPLICATE_WORD_OVERLAP;
+}
+
+export function cleanSummary(text) {
+  const kept = [];
+  for (const line of text.split('\n').map((l) => l.trim()).filter(Boolean)) {
+    const words = lineWords(line);
+    if (kept.some((k) => isDuplicateLine(words, k.words))) continue;
+    kept.push({ line, words });
+  }
+  return kept.slice(0, MAX_SUMMARY_LINES).map((k) => k.line).join('\n');
+}
 
 function buildSystemPrompt(todayKR) {
   return `You are a concise AI model release tracker.
@@ -70,12 +105,12 @@ async function fetchCompanySummary(company) {
 
   // Merge every text block (Haiku can emit more than one, interleaved with
   // web_search tool_use/tool_result blocks) — never just the first one.
-  const text = data.content
-    .filter((b) => b.type === 'text')
-    .map((b) => b.text)
-    .join('')
-    .replace(/\n{3,}/g, '\n')
-    .trim();
+  const text = cleanSummary(
+    data.content
+      .filter((b) => b.type === 'text')
+      .map((b) => b.text)
+      .join('')
+  );
 
   console.log(`[${company.id}] content blocks=${data.content.map((b) => b.type).join(',')} extracted text length=${text.length}`);
 
