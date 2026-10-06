@@ -154,17 +154,15 @@
       flex-shrink: 0;
     }
 
-    .official-badge {
+    /* 운영자 인증 체크 — 닉네임 바로 뒤, 글자 크기에 맞춘다 */
+    .official-mark {
       display: inline-block;
-      font-family: 'IBM Plex Mono', monospace;
-      font-size: 10px;
-      line-height: 1.5;
+      width: 1em;
+      height: 1em;
+      margin-left: 4px;
       color: var(--accent);
-      border: 1px solid var(--accent);
-      border-radius: 4px;
-      padding: 0 5px;
-      margin-right: 6px;
-      vertical-align: 1px;
+      vertical-align: -0.15em;
+      flex-shrink: 0;
     }
 
     .guide-grid {
@@ -654,14 +652,15 @@
     const a = el('a', 'guide-card');
     a.href = `post.html?id=${encodeURIComponent(row.id)}`;
 
-    const title = el('span', 'title');
-    title.appendChild(OfficialPosts.officialBadge());
-    title.appendChild(document.createTextNode(row.title));
-    a.appendChild(title);
+    a.appendChild(el('span', 'title', row.title));
 
     const previewText = BusinessPage.previewText(row.body);
     if (previewText) a.appendChild(el('span', 'preview', previewText));
-    a.appendChild(el('span', 'meta', `${formatRelativeTime(row.created_at)} · 댓글 ${row.comments?.length || 0}`));
+    // 구역 제목이 이미 "운영자 가이드"라서 카드에는 배지 없이 "운영자 ✓"만 둔다.
+    const meta = el('span', 'meta');
+    OfficialPosts.appendAuthor(meta, row);
+    meta.appendChild(document.createTextNode(` · ${formatRelativeTime(row.created_at)} · 댓글 ${row.comments?.length || 0}`));
+    a.appendChild(meta);
     return a;
   }
 

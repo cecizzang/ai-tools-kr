@@ -171,17 +171,15 @@
       width: 48px;
     }
 
-    .official-badge {
+    /* 운영자 인증 체크 — 닉네임 바로 뒤, 글자 크기에 맞춘다 */
+    .official-mark {
       display: inline-block;
-      font-family: 'IBM Plex Mono', monospace;
-      font-size: 10px;
-      line-height: 1.5;
+      width: 1em;
+      height: 1em;
+      margin-left: 4px;
       color: var(--accent);
-      border: 1px solid var(--accent);
-      border-radius: 4px;
-      padding: 0 5px;
-      margin-right: 6px;
-      vertical-align: 1px;
+      vertical-align: -0.15em;
+      flex-shrink: 0;
     }
 
     .board-preview-title {
@@ -526,8 +524,8 @@
 
     const meta = document.createElement('span');
     meta.className = 'board-preview-meta';
-    if (OfficialPosts.isOfficial(row)) meta.appendChild(OfficialPosts.officialBadge());
-    meta.appendChild(document.createTextNode(`${row.nickname} · ${formatRelativeTime(row.created_at)}`));
+    OfficialPosts.appendAuthor(meta, row);
+    meta.appendChild(document.createTextNode(` · ${formatRelativeTime(row.created_at)}`));
 
     a.appendChild(cat);
     a.appendChild(title);

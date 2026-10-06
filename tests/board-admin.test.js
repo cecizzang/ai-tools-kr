@@ -14,8 +14,9 @@ const NEW_POST = { type: 'post', category: 'business', nickname: '사장님', pa
 const EDIT = { id: POST_ID, title: '새 제목', body: '새 본문입니다' };
 
 // 핸들러를 실제로 돌리되 Supabase 호출만 가짜로 바꾼다.
-// adminKeyEnv: ADMIN_POST_KEY 값 (null이면 미설정), recentAttempts: 이 IP의 최근 시도 수, post: 조회되는 글
-async function run(handler, body, { adminKeyEnv = ADMIN_KEY, recentAttempts = 0, post = null } = {}) {
+// adminKeyEnv: ADMIN_POST_KEY 값 (null이면 미설정), recentAttempts: 이 IP의 최근 시도 수, post: 조회되는 글,
+// commentsHaveOfficial: comments.is_official 컬럼이 있는지 (없으면 그 컬럼을 넣은 insert는 400)
+async function run(handler, body, { adminKeyEnv = ADMIN_KEY, recentAttempts = 0, post = null, commentsHaveOfficial = true } = {}) {
   const calls = { attemptsLogged: 0, inserts: [], patches: [], lookups: [], requests: [] };
   const logs = [];
   const real = { fetch: globalThis.fetch, log: console.log, warn: console.warn, error: console.error, key: process.env.ADMIN_POST_KEY };
@@ -43,7 +44,11 @@ async function run(handler, body, { adminKeyEnv = ADMIN_KEY, recentAttempts = 0,
     }
     if (u.includes('/rest/v1/comments') && m === 'GET') return new Response('[]');
     if (u.includes('/rest/v1/comments') && m === 'POST') {
-      calls.inserts.push(JSON.parse(options.body));
+      const row = JSON.parse(options.body);
+      if ('is_official' in row && !commentsHaveOfficial) {
+        return new Response(JSON.stringify({ code: 'PGRST204', message: "Could not find the 'is_official' column" }), { status: 400 });
+      }
+      calls.inserts.push(row);
       return new Response(JSON.stringify([{ id: 'comment-id' }]), { status: 201 });
     }
     if (u.includes('/rest/v1/posts') && m === 'PATCH') {
@@ -186,8 +191,24 @@ test('작성: 댓글도 "운영자" 닉네임은 운영자 키가 있어야 쓴�
   const allowed = await run(createHandler, { ...comment, nickname: '아무개', adminKey: ADMIN_KEY });
   assert.equal(allowed.status, 200);
   assert.equal(allowed.calls.inserts[0].nickname, '운영자');
-  assert.ok(!('is_official' in allowed.calls.inserts[0])); // comments에는 그 컬럼이 없다
+  assert.equal(allowed.calls.inserts[0].is_official, true);
   assertKeyNeverLeaves(allowed, ADMIN_KEY);
+});
+
+test('작성: comments.is_official 컬럼이 아직 없으면 운영자 댓글은 표시 없이 저장', async () => {
+  const comment = { type: 'comment', postId: POST_ID, nickname: '아무개', password: PASSWORD, body: '댓글입니다', adminKey: ADMIN_KEY };
+  const result = await run(createHandler, comment, { commentsHaveOfficial: false });
+  assert.equal(result.status, 200);
+  assert.equal(result.calls.inserts.length, 1);
+  assert.equal(result.calls.inserts[0].nickname, '운영자');
+  assert.ok(!('is_official' in result.calls.inserts[0]));
+});
+
+test('작성: 일반 댓글은 is_official을 보내지 않는다', async () => {
+  const comment = { type: 'comment', postId: POST_ID, nickname: '사장님', password: PASSWORD, body: '댓글입니다', is_official: true };
+  const result = await run(createHandler, comment);
+  assert.equal(result.status, 200);
+  assert.ok(!('is_official' in result.calls.inserts[0]));
 });
 
 test('작성: 일반 글은 그대로 — is_official을 보내지 않고 시도 기록도 건드리지 않는다', async () => {

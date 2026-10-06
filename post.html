@@ -111,17 +111,15 @@
       margin-bottom: 8px;
     }
 
-    .official-badge {
+    /* 운영자 인증 체크 — 닉네임 바로 뒤, 글자 크기에 맞춘다 */
+    .official-mark {
       display: inline-block;
-      font-family: 'IBM Plex Mono', monospace;
-      font-size: 10px;
-      line-height: 1.5;
+      width: 1em;
+      height: 1em;
+      margin-left: 4px;
       color: var(--accent);
-      border: 1px solid var(--accent);
-      border-radius: 4px;
-      padding: 0 5px;
-      margin-right: 6px;
-      vertical-align: 1px;
+      vertical-align: -0.15em;
+      flex-shrink: 0;
     }
 
     .post-meta {
@@ -370,10 +368,10 @@
 
     const metaEl = document.createElement('div');
     metaEl.className = 'post-meta';
-    // 운영자 글이면 닉네임 앞에 목록과 같은 배지. 닉네임이 아니라 is_official로만 판별한다.
-    if (OfficialPosts.isOfficial(post)) metaEl.appendChild(OfficialPosts.officialBadge());
+    // 운영자 글이면 닉네임 뒤에 목록과 같은 인증 체크. 닉네임이 아니라 is_official로만 판별한다.
+    OfficialPosts.appendAuthor(metaEl, post);
     metaEl.appendChild(document.createTextNode(
-      `${post.nickname} · ${formatRelativeTime(post.created_at)}${post.updated_at ? ' (수정됨)' : ''}`
+      ` · ${formatRelativeTime(post.created_at)}${post.updated_at ? ' (수정됨)' : ''}`
     ));
 
     const bodyEl = document.createElement('div');
@@ -571,7 +569,8 @@
     meta.className = 'comment-meta';
 
     const metaText = document.createElement('span');
-    metaText.textContent = `${c.nickname} · ${formatRelativeTime(c.created_at)}`;
+    OfficialPosts.appendAuthor(metaText, c);
+    metaText.appendChild(document.createTextNode(` · ${formatRelativeTime(c.created_at)}`));
 
     const delBtn = document.createElement('button');
     delBtn.className = 'comment-delete';
@@ -595,9 +594,14 @@
     listEl.textContent = '';
 
     try {
-      const res = await fetch(
-        `${SUPABASE_URL}/rest/v1/comments?post_id=eq.${encodeURIComponent(POST_ID)}&select=id,post_id,nickname,body,created_at&order=created_at.asc`,
-        { headers: { apikey: SUPABASE_ANON_KEY, Authorization: `Bearer ${SUPABASE_ANON_KEY}` } }
+      // comments.is_official은 있으면 쓰고(supabase/official-comments.sql), 못 읽으면 빼고 읽는다.
+      const res = await OfficialPosts.fetchWithOptionalColumns(
+        (columns) => fetch(
+          `${SUPABASE_URL}/rest/v1/comments?post_id=eq.${encodeURIComponent(POST_ID)}&select=${columns}&order=created_at.asc`,
+          { headers: { apikey: SUPABASE_ANON_KEY, Authorization: `Bearer ${SUPABASE_ANON_KEY}` } }
+        ),
+        'id,post_id,nickname,body,created_at',
+        ['is_official']
       );
       if (!res.ok) throw new Error(`status ${res.status}`);
       const rows = await res.json();
@@ -633,6 +637,21 @@
     loadComments();
   }
 
+  // post.html?...&admin=1 로 열면 댓글 폼에 운영자 키 칸이 생기고, 키가 맞으면 운영자 댓글로 저장된다.
+  let commentAdminKeyInput = null;
+  if (ADMIN_MODE) {
+    const commentForm = document.getElementById('commentForm');
+    commentForm.nickname.value = '운영자';
+    commentForm.nickname.readOnly = true;
+    commentAdminKeyInput = document.createElement('input');
+    commentAdminKeyInput.type = 'password';
+    commentAdminKeyInput.autocomplete = 'off';
+    commentAdminKeyInput.required = true;
+    commentAdminKeyInput.placeholder = '운영자 키';
+    commentAdminKeyInput.setAttribute('aria-label', '운영자 키');
+    commentForm.insertBefore(commentAdminKeyInput, commentForm.firstChild);
+  }
+
   document.getElementById('commentForm').addEventListener('submit', async (e) => {
     e.preventDefault();
     const form = e.target;
@@ -653,6 +672,7 @@
           body: form.body.value,
           password: form.password.value,
           honeypot: form.website.value,
+          ...(commentAdminKeyInput ? { adminKey: commentAdminKeyInput.value } : {}),
         }),
       });
       const data = await res.json();
@@ -661,6 +681,7 @@
         return;
       }
       form.reset();
+      if (ADMIN_MODE) form.nickname.value = '운영자';
       loadComments();
     } catch (err) {
       errEl.textContent = '등록에 실패했습니다.';

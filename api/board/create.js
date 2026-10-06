@@ -189,7 +189,7 @@ export default async function handler(req, res) {
     return res.status(429).json({ error: '잠시 후 다시 시도해주세요 (20초에 1개)' });
   }
 
-  const insertRes = await supabaseFetch('/rest/v1/comments', {
+  const insertComment = (official) => supabaseFetch('/rest/v1/comments', {
     method: 'POST',
     headers: { Prefer: 'return=representation' },
     body: JSON.stringify({
@@ -198,8 +198,14 @@ export default async function handler(req, res) {
       body: body.trim(),
       password_hash: hashPassword(password),
       ip_hash: ipHash,
+      ...(official ? { is_official: true } : {}),
     }),
   });
+
+  // 운영자 키가 맞은 댓글은 is_official=true로 저장한다. comments.is_official 컬럼이 아직 없으면
+  // (supabase/official-comments.sql 실행 전) 400이 나므로, 그때는 표시 없이 일반 댓글로 저장한다.
+  let insertRes = await insertComment(isAdmin);
+  if (isAdmin && insertRes.status === 400) insertRes = await insertComment(false);
 
   if (!insertRes.ok) {
     return res.status(500).json({ error: `저장 실패: ${insertRes.status}` });

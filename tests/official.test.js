@@ -6,7 +6,7 @@ import { readFileSync } from 'node:fs';
 import officialModule from '../official.js';
 import createHandler from '../api/board/create.js';
 
-const { OFFICIAL_LABEL, isOfficial, officialBadge, fetchWithOfficial } = officialModule;
+const { OFFICIAL_MARK_LABEL, isOfficial, officialMark, appendAuthor, fetchWithOfficial } = officialModule;
 const read = (path) => readFileSync(new URL(`../${path}`, import.meta.url), 'utf8');
 
 test('isOfficial: is_official이 true일 때만 — 닉네임으로는 판별하지 않는다', () => {
@@ -17,10 +17,56 @@ test('isOfficial: is_official이 true일 때만 — 닉네임으로는 판별하
   assert.equal(isOfficial(null), false);
 });
 
-test('officialBadge: "운영자" 배지 요소', () => {
-  const doc = { createElement: (tag) => ({ tag, className: '', textContent: '' }) };
-  assert.deepEqual(officialBadge(doc), { tag: 'span', className: 'official-badge', textContent: '운영자' });
-  assert.equal(OFFICIAL_LABEL, '운영자');
+// 요소를 { tag, ns, attrs, children, text } 로 기록하는 최소한의 가짜 document
+function fakeDoc() {
+  const node = (tag, ns) => ({
+    tag, ns, attrs: {}, children: [], textContent: '',
+    setAttribute(name, value) { this.attrs[name] = value; },
+    appendChild(child) { this.children.push(child); return child; },
+  });
+  return {
+    createElement: (tag) => node(tag, null),
+    createElementNS: (ns, tag) => node(tag, ns),
+    createTextNode: (text) => ({ text }),
+  };
+}
+
+test('officialMark: 인라인 SVG 체크 원형 아이콘, title/aria-label="운영자 인증"', () => {
+  const svg = officialMark(fakeDoc());
+  assert.equal(svg.tag, 'svg');
+  assert.equal(svg.ns, 'http://www.w3.org/2000/svg');
+  assert.equal(svg.attrs.class, 'official-mark');
+  assert.equal(svg.attrs.role, 'img');
+  assert.equal(svg.attrs['aria-label'], '운영자 인증');
+  assert.equal(OFFICIAL_MARK_LABEL, '운영자 인증');
+
+  const [title, circle, check] = svg.children;
+  assert.equal(title.tag, 'title');
+  assert.equal(title.textContent, '운영자 인증');
+  assert.equal(circle.tag, 'circle');
+  assert.equal(circle.attrs.fill, 'currentColor'); // 색은 CSS(.official-mark)의 포인트 컬러를 따른다
+  assert.equal(check.tag, 'path');
+  assert.equal(check.attrs.fill, 'none');
+  assert.ok(svg.children.every((child) => child.ns === 'http://www.w3.org/2000/svg'));
+  // 이모지나 글자로 된 체크가 아니다
+  assert.equal(svg.textContent, '');
+});
+
+test('appendAuthor: 운영자 글은 닉네임 뒤에 체크만 — 별도 "운영자" 배지는 없다', () => {
+  const el = fakeDoc().createElement('span');
+  appendAuthor(el, { nickname: '운영자', is_official: true }, fakeDoc());
+  assert.equal(el.children.length, 2);
+  assert.deepEqual(el.children[0], { text: '운영자' });
+  assert.equal(el.children[1].tag, 'svg');
+  assert.equal(el.children[1].attrs.class, 'official-mark');
+});
+
+test('appendAuthor: 일반 글은 닉네임만 — 닉네임이 "운영자"여도 체크가 붙지 않는다', () => {
+  for (const row of [{ nickname: '사장님', is_official: false }, { nickname: '운영자', is_official: false }, { nickname: '운영자' }]) {
+    const el = fakeDoc().createElement('span');
+    appendAuthor(el, row, fakeDoc());
+    assert.deepEqual(el.children, [{ text: row.nickname }]);
+  }
 });
 
 test('fetchWithOfficial: 읽을 수 있으면 is_official 포함 주소로 한 번만 요청', async () => {
@@ -126,13 +172,19 @@ test('official-posts.sql: 읽기 권한 + 방문자 쓰기를 막는 트리거�
   assert.ok(!/grant[^;]*(insert|update)[^;]*to anon/i.test(sql));
 });
 
-test('목록 페이지들은 official.js로 배지를 그리고 닉네임으로 판별하지 않는다', () => {
-  for (const page of ['board.html', 'index.html', 'business.html']) {
+test('목록·상세 페이지들은 official.js로 작성자를 그리고 닉네임으로 판별하지 않는다', () => {
+  for (const page of ['board.html', 'index.html', 'business.html', 'post.html']) {
     const html = read(page);
     assert.match(html, /<script src="official\.js"><\/script>/, page);
-    assert.match(html, /\.official-badge \{/, page);
-    assert.match(html, /OfficialPosts\.officialBadge\(\)/, page);
-    assert.match(html, /OfficialPosts\.fetchWithOfficial\(/, page);
+    // 체크 아이콘은 사이트 포인트 컬러, 글자 크기에 맞춘다
+    const css = html.match(/\.official-mark \{([^}]*)\}/)?.[1] || '';
+    assert.match(css, /width: 1em;/, page);
+    assert.match(css, /height: 1em;/, page);
+    assert.match(css, /color: var\(--accent\);/, page);
+    assert.match(html, /OfficialPosts\.appendAuthor\(/, page);
+    // 예전 "운영자" 배지는 남아 있지 않다
+    assert.ok(!/official-badge|officialBadge/.test(html), page);
+    if (page !== 'post.html') assert.match(html, /OfficialPosts\.fetchWithOfficial\(/, page);
     assert.ok(!/nickname\s*===?\s*['"]운영자['"]/.test(html), page);
 
   }
@@ -146,6 +198,10 @@ test('business.html: 운영자 가이드(최신 3개)와 사장님들의 글을 
   assert.match(html, /&is_official=eq\.true&order=created_at\.desc&limit=\$\{GUIDE_COUNT\}/);
   assert.match(html, /official \? '&is_official=eq\.false' : ''/);
   assert.match(html, /아직 글이 없어요\. 첫 글을 남겨주세요/);
+  // 가이드 카드: 구역 제목이 "운영자 가이드"라 제목 앞 배지는 없고, 작성자 표시에 "운영자 ✓"만
+  const card = html.slice(html.indexOf('function buildGuideCard'), html.indexOf('async function loadGuides'));
+  assert.match(card, /a\.appendChild\(el\('span', 'title', row\.title\)\);/);
+  assert.match(card, /OfficialPosts\.appendAuthor\(meta, row\);/);
   // 다크 테마용 얇은 스크롤바
   assert.match(html, /scrollbar-width: thin;/);
   assert.match(html, /\.tool-strip::-webkit-scrollbar \{ height: 6px; \}/);

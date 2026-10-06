@@ -108,20 +108,34 @@ test('fetchWithOptionalColumns: 기본 컬럼조차 실패하면 마지막 실�
   assert.equal(requested.at(-1), 'id,title');
 });
 
-test('post.html: 작성자 닉네임 앞에 is_official 기준 운영자 배지, 댓글 목록은 그대로', () => {
+test('post.html: 글 작성자와 댓글 작성자 닉네임 뒤에 is_official 기준 인증 체크', () => {
   const html = read('post.html');
   assert.match(html, /<script src="official\.js"><\/script>/);
-  assert.match(html, /\.official-badge \{/);
+  assert.match(html, /\.official-mark \{/);
   assert.match(html, /fetchWithOptionalColumns\(fetchPost, columns, \['updated_at', 'is_official'\]\)/);
-
-  const renderPost = html.slice(html.indexOf('function renderPost'), html.indexOf('function startEditPost'));
-  // 배지를 먼저 붙이고 그 뒤에 닉네임 텍스트
-  const badgeAt = renderPost.indexOf('if (OfficialPosts.isOfficial(post)) metaEl.appendChild(OfficialPosts.officialBadge());');
-  const nicknameAt = renderPost.indexOf('${post.nickname}');
-  assert.ok(badgeAt !== -1 && nicknameAt !== -1 && badgeAt < nicknameAt);
   assert.ok(!/nickname\s*===?\s*['"]운영자['"]/.test(html));
 
-  // 배지는 글 작성자에만 — 댓글 쪽 코드에는 없고, 댓글 조회 컬럼도 그대로다
-  assert.equal(html.split('OfficialPosts.officialBadge()').length - 1, 1);
-  assert.match(html, /comments\?post_id=eq\.\$\{encodeURIComponent\(POST_ID\)\}&select=id,post_id,nickname,body,created_at&order=created_at\.asc/);
+  // 글: 닉네임(+체크)을 먼저 그리고 그 뒤에 시간
+  const renderPost = html.slice(html.indexOf('function renderPost'), html.indexOf('function startEditPost'));
+  const authorAt = renderPost.indexOf('OfficialPosts.appendAuthor(metaEl, post);');
+  const timeAt = renderPost.indexOf('formatRelativeTime(post.created_at)');
+  assert.ok(authorAt !== -1 && timeAt !== -1 && authorAt < timeAt);
+
+  // 댓글: 같은 방식. comments.is_official은 못 읽으면 빼고 읽는다
+  const buildComment = html.slice(html.indexOf('function buildComment'), html.indexOf('async function loadComments'));
+  assert.match(buildComment, /OfficialPosts\.appendAuthor\(metaText, c\);/);
+  const loadComments = html.slice(html.indexOf('async function loadComments'), html.indexOf('async function deleteComment'));
+  assert.match(loadComments, /fetchWithOptionalColumns\(/);
+  assert.match(loadComments, /'id,post_id,nickname,body,created_at',\s*\['is_official'\]/);
+});
+
+test('fetchWithOptionalColumns: 댓글의 is_official을 못 읽어도 댓글 목록은 나온다', async () => {
+  const requested = [];
+  const res = await fetchWithOptionalColumns(
+    async (columns) => { requested.push(columns); return { ok: !columns.includes('is_official'), status: 400 }; },
+    'id,post_id,nickname,body,created_at',
+    ['is_official']
+  );
+  assert.equal(res.ok, true);
+  assert.deepEqual(requested, ['id,post_id,nickname,body,created_at,is_official', 'id,post_id,nickname,body,created_at']);
 });
