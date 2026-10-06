@@ -9,9 +9,7 @@ const MIN_PROPOSALS_PER_CATEGORY = 2;
 const MAX_PROPOSALS_PER_CATEGORY = 4;
 // 카테고리 요청 하나가 쓸 수 있는 웹 검색 횟수.
 const MAX_WEB_SEARCHES_PER_REQUEST = 5;
-// released가 이보다 오래된 툴은 "최근 툴"이 아니므로 저장하지 않는다.
-const MAX_RELEASED_AGE_MONTHS = 12;
-// 출시된 지 이만큼이 안 된 툴은 사용자 근거(evidence)가 있어야 저장한다.
+// 출시된 지 이만큼이 안 된 툴은 사용자 근거(evidence)가 있어야 저장한다. 그보다 오래된 툴은 그냥 통과한다.
 const MIN_LAUNCH_AGE_MONTHS = 6;
 const MIN_EVIDENCE_LENGTH = 10;
 
@@ -51,11 +49,10 @@ const PROPOSE_TOOLS_TOOL = {
             korean: { type: 'string', enum: ['full', 'partial', 'none'], description: '한국어 UI/기능 지원 수준' },
             domestic: { type: 'boolean', description: '한국 회사가 만든 국내 서비스면 true' },
             target: { type: 'string', enum: ['dev', 'biz', 'both'], description: '1인 개발자용인지 소상공인/1인사업자용인지' },
-            released: { type: 'string', description: '출시 또는 마지막 주요 업데이트 연월. YYYY-MM 형식 (예: 2026-09)' },
-            launched: { type: 'string', description: '최초 출시 연월. YYYY-MM 형식. 확인하지 못했으면 빈 문자열' },
+            launched: { type: 'string', description: '최초 출시 연월. YYYY-MM 형식 (예: 2026-09). 확인하지 못했으면 빈 문자열' },
             evidence: { type: 'string', description: '실제 사용자가 있다는 근거를 한국어 한 문장으로 (사용자 수, 리뷰·평점, 투자 유치, 주요 매체 보도 등). 검색으로 확인하지 못했으면 빈 문자열' },
           },
-          required: ['name', 'url', 'description', 'price', 'korean', 'domestic', 'target', 'released', 'launched', 'evidence'],
+          required: ['name', 'url', 'description', 'price', 'korean', 'domestic', 'target', 'launched', 'evidence'],
         },
       },
     },
@@ -76,9 +73,8 @@ function buildSystemPrompt(todayKR) {
   그래도 아래 조건을 만족하는 툴이 ${MIN_PROPOSALS_PER_CATEGORY}개가 안 되면, 조건에 안 맞는 툴로 채우지 말고 찾은 만큼만 반환해라.
 - 한국 사용자 기준으로 골라라. 한국어 UI·한국어 입출력을 지원하는 툴과 국내(한국) 서비스를 우선하고,
   조건이 비슷하면 그런 툴을 먼저 제안해라. 해외 툴은 한국에서 가입해 쓸 수 있는 것만 제안해라.
-- 최근 ${MAX_RELEASED_AGE_MONTHS}개월 안에 출시됐거나 주요 업데이트가 있었던 툴만 제안해라.
-  released에는 검색으로 확인한 출시 또는 마지막 주요 업데이트 연월을 YYYY-MM 형식으로 써라. 연월을 확인하지 못한 툴은 제안하지 마라.
-- launched에는 최초 출시 연월을 YYYY-MM 형식으로 써라.
+- 출시 시기는 제한이 없다. 나온 지 오래된 툴도 지금 쓸 만하면 제안해라.
+- launched에는 검색으로 확인한 최초 출시 연월을 YYYY-MM 형식으로 써라. 확인하지 못했으면 빈 문자열로 둬라.
 - 출시된 지 ${MIN_LAUNCH_AGE_MONTHS}개월이 안 된 툴은, 실제 사용자가 있다는 근거(공개된 사용자 수, 리뷰·평점, 투자 유치,
   주요 매체 보도 등)를 검색으로 확인한 경우에만 제안해라. 근거를 찾지 못한 신생 툴은 제안하지 마라.
 - evidence에는 확인한 사용자 근거를 한국어 한 문장으로 써라. 확인하지 못했으면 지어내지 말고 빈 문자열로 둬라.
@@ -200,14 +196,9 @@ function monthsAgo(yearMonth, now) {
 }
 
 // 저장하면 안 되는 제안이면 이유 문자열을, 문제없으면 null을 돌려준다.
+// 출시일로 걸러내는 건 "출시 6개월 미만이면서 사용자 근거가 없는" 툴뿐이다 — 오래된 툴은 통과한다.
 export function findToolProblem(tool, now = new Date()) {
-  const released = String(tool.released ?? '');
-  const ageMonths = monthsAgo(released, now);
-  if (ageMonths === null) return `released 형식 오류: ${released}`;
-  if (ageMonths > MAX_RELEASED_AGE_MONTHS) return `released ${ageMonths}개월 전: ${released}`;
-  if (ageMonths < 0) return `released 미래 연월: ${released}`;
-
-  // 신생 툴은 사용자 근거가 있어야 한다. 출시 연월을 모르면 신생 툴로 본다.
+  // 출시 연월을 모르면 (빈 값·형식 오류) 신생 툴로 본다.
   const launchAge = monthsAgo(tool.launched, now);
   const isNew = launchAge === null || launchAge < MIN_LAUNCH_AGE_MONTHS;
   if (isNew && String(tool.evidence ?? '').trim().length < MIN_EVIDENCE_LENGTH) {
@@ -369,9 +360,8 @@ async function insertTool(tool) {
       price: tool.price,
       korean: tool.korean,
       target: tool.target,
-      // 사람이 Supabase 대시보드에서 검토 후 is_published를 true로 바꾸기 전까지는
-      // 사이트에 노출되지 않는다 — 기존 tools 테이블의 수동 큐레이션 원칙을 그대로 따름.
-      is_published: false,
+      // 검토 없이 바로 사이트에 공개된다. 자동으로 들어온 행은 source='auto'로 구분할 수 있다.
+      is_published: true,
       source: 'auto',
       last_checked: todayKST(),
     }),

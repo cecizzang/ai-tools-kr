@@ -15,7 +15,6 @@ const tool = (overrides = {}) => ({
   korean: 'partial',
   domestic: false,
   target: 'both',
-  released: '2026-09',
   launched: '2025-01',
   evidence: '',
   ...overrides,
@@ -73,9 +72,9 @@ test('checkCandidate: 중복 → 검증 순서로 판정하고 사유를 돌려�
     { result: 'ok', reason: null }
   );
   assert.equal(checkCandidate(tool({ name: 'Gemini' }), KNOWN, NOW).result, 'duplicate');
-  const invalid = checkCandidate(tool({ name: 'Old One', url: 'https://old.example', released: '2023-03' }), KNOWN, NOW);
+  const invalid = checkCandidate(tool({ name: 'New One', url: 'https://new.example', launched: '2026-08' }), KNOWN, NOW);
   assert.equal(invalid.result, 'invalid');
-  assert.match(invalid.reason, /^released 43개월 전/);
+  assert.match(invalid.reason, /^출시 2개월 \+ 사용자 근거 없음/);
   assert.deepEqual(checkCandidate(tool({ url: '' }), KNOWN, NOW), { result: 'invalid', reason: 'name 또는 url 없음' });
   assert.equal(checkCandidate(null, KNOWN, NOW).result, 'invalid');
 });
@@ -99,7 +98,7 @@ test('categoriesForRun: 매주 3~4개씩, 2주에 7개 카테고리를 한 바�
 
 const thisMonth = new Date().toLocaleDateString('sv-SE', { timeZone: 'Asia/Seoul' }).slice(0, 7);
 const fresh = (name, overrides = {}) =>
-  tool({ name, url: `https://${name.toLowerCase().replace(/\s+/g, '-')}.example`, released: thisMonth, ...overrides });
+  tool({ name, url: `https://${name.toLowerCase().replace(/\s+/g, '-')}.example`, ...overrides });
 
 const FAKE_ENV = {
   SUPABASE_URL: 'https://db.example',
@@ -172,7 +171,7 @@ const cronRunOf = (calls) => writes(calls).find((c) => c.url.includes('/rest/v1/
 const MIXED = {
   dev: [fresh('Fresh Tool'), fresh('lovable', { url: 'https://elsewhere.example' })],
   image: [
-    fresh('Stale Tool', { released: '2020-01' }),
+    fresh('Unproven Tool', { launched: thisMonth }),
     fresh('Fresh Again', { url: 'https://fresh-tool.example/app' }),
     fresh('Broken Insert'),
   ],
@@ -208,7 +207,7 @@ test('runDiscovery: 후보마다 결과와 사유를 남기고 통과한 것만 
     assert.deepEqual(run.candidates.map((c) => [c.category, c.name, c.result]), [
       ['dev', 'Fresh Tool', 'inserted'],
       ['dev', 'lovable', 'duplicate'],
-      ['image', 'Stale Tool', 'invalid'],
+      ['image', 'Unproven Tool', 'invalid'],
       ['image', 'Fresh Again', 'duplicate'], // 같은 실행에서 먼저 들어간 Fresh Tool과 URL이 겹친다
       ['image', 'Broken Insert', 'insert_error'],
     ]);
@@ -223,7 +222,7 @@ test('runDiscovery: 후보마다 결과와 사유를 남기고 통과한 것만 
     assert.equal(candidateLogs.length, 5);
     assert.match(candidateLogs[0], /category=dev name="Fresh Tool" url="https:\/\/fresh-tool\.example" result=추가 reason=-/);
     assert.match(candidateLogs[1], /result=중복 reason=이름 일치/);
-    assert.match(candidateLogs[2], /result=검증 탈락 reason=released/);
+    assert.match(candidateLogs[2], /result=검증 탈락 reason=출시 0개월 \+ 사용자 근거 없음/);
     assert.match(candidateLogs[4], /result=insert 에러 reason=Supabase 400/);
     // 키는 로그·사유 어디에도 나오지 않는다
     assert.ok(!logs.join('\n').includes('service-role-secret'));
@@ -232,7 +231,9 @@ test('runDiscovery: 후보마다 결과와 사유를 남기고 통과한 것만 
     // 삽입되는 행의 category는 모델이 아니라 요청한 카테고리로 정해진다
     const inserts = writes(calls).filter((c) => c.url.endsWith('/rest/v1/tools'));
     assert.deepEqual(inserts.map((c) => [c.body.name, c.body.category]), [['Fresh Tool', 'dev'], ['Broken Insert', 'image']]);
-    assert.equal(inserts[0].body.is_published, false);
+    // 자동으로 들어온 툴도 바로 공개된다
+    assert.equal(inserts[0].body.is_published, true);
+    assert.equal(inserts[0].body.source, 'auto');
 
     const cronRun = cronRunOf(calls);
     assert.equal(cronRun.job, 'discover-tools');
