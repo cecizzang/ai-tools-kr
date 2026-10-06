@@ -7,6 +7,12 @@ import {
   getClientIp,
   supabaseFetch,
   isRateLimited,
+  ADMIN_NICKNAME,
+  ATTEMPT_LIMIT,
+  checkAdminKey,
+  isReservedNickname,
+  isAttemptRateLimited,
+  recordAttempt,
   sniffImageType,
   supabaseStorageUpload,
   publicStorageUrl,
@@ -73,7 +79,8 @@ export default async function handler(req, res) {
     return res.status(405).json({ error: 'POST만 허용됩니다' });
   }
 
-  const { type, honeypot, nickname, password } = req.body || {};
+  const { type, honeypot, password, adminKey } = req.body || {};
+  let { nickname } = req.body || {};
 
   // Silently pretend success — never reveal to a bot that the honeypot caught it.
   if (honeypot) {
@@ -84,15 +91,33 @@ export default async function handler(req, res) {
     return res.status(400).json({ error: 'type이 올바르지 않습니다' });
   }
 
+  const ip = getClientIp(req);
+  const ipHash = hashIp(ip);
+
+  // 운영자 모드: adminKey가 맞으면 닉네임을 '운영자'로 고정하고 글을 is_official=true로 저장한다.
+  // 키가 틀린 시도는 글 수정 시도와 같은 한도(IP당 1분에 5번)로 센다. 키는 기록하지 않는다.
+  const admin = checkAdminKey(adminKey);
+  if (admin !== 'none') {
+    if (await isAttemptRateLimited(ipHash)) {
+      return res.status(429).json({ error: `잠시 후 다시 시도해주세요 (1분에 ${ATTEMPT_LIMIT}번)` });
+    }
+    if (admin === 'denied') {
+      await recordAttempt(ipHash);
+      return res.status(403).json({ error: '운영자 키가 올바르지 않습니다' });
+    }
+    nickname = ADMIN_NICKNAME;
+  }
+  const isAdmin = admin === 'ok';
+
   if (!validateLength(nickname, LIMITS.nickname)) {
     return res.status(400).json({ error: `닉네임은 ${LIMITS.nickname[0]}~${LIMITS.nickname[1]}자여야 합니다` });
+  }
+  if (!isAdmin && isReservedNickname(nickname)) {
+    return res.status(400).json({ error: '사용할 수 없는 닉네임입니다' });
   }
   if (!validateLength(password, LIMITS.password)) {
     return res.status(400).json({ error: `비밀번호는 ${LIMITS.password[0]}~${LIMITS.password[1]}자여야 합니다` });
   }
-
-  const ip = getClientIp(req);
-  const ipHash = hashIp(ip);
 
   if (type === 'post') {
     const { category, title, body, images } = req.body;
@@ -137,6 +162,8 @@ export default async function handler(req, res) {
         image_urls: imageUrls,
         password_hash: hashPassword(password),
         ip_hash: ipHash,
+        // 운영자 키가 맞았을 때만 보낸다 — 그 밖에는 DB 기본값(false)이 들어간다.
+        ...(isAdmin ? { is_official: true } : {}),
       }),
     });
 

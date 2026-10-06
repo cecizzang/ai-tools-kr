@@ -85,7 +85,7 @@ test('글 작성 API는 요청에 is_official=true가 들어와도 저장하지 
       headers: { 'x-forwarded-for': '203.0.113.7' },
       socket: {},
       body: {
-        type: 'post', category: 'business', nickname: '운영자', password: 'pass1234',
+        type: 'post', category: 'business', nickname: '사장님', password: 'pass1234',
         title: '운영자인 척하는 글', body: '본문입니다', is_official: true, isOfficial: true,
       },
     }, res);

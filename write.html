@@ -288,6 +288,31 @@
     categoryField.closest('div').style.display = 'none';
   }
 
+  // ?admin=1 일 때만 운영자 키 입력칸을 만든다 (일반 화면에는 요소 자체가 없다).
+  // 키가 맞는지는 서버가 확인하고, 맞으면 닉네임 '운영자'의 운영자 글로 저장된다.
+  const ADMIN_MODE = new URLSearchParams(location.search).get('admin') === '1';
+  let adminKeyInput = null;
+  if (ADMIN_MODE) {
+    const nicknameInput = document.getElementById('nickname');
+    nicknameInput.value = '운영자';
+    nicknameInput.readOnly = true;
+
+    const wrap = document.createElement('div');
+    const label = document.createElement('label');
+    label.htmlFor = 'adminKey';
+    label.textContent = '운영자 키';
+    adminKeyInput = document.createElement('input');
+    adminKeyInput.id = 'adminKey';
+    adminKeyInput.type = 'password';
+    adminKeyInput.autocomplete = 'off';
+    adminKeyInput.required = true;
+    adminKeyInput.placeholder = '운영자 글로 등록됩니다';
+    wrap.appendChild(label);
+    wrap.appendChild(adminKeyInput);
+    const form = document.getElementById('writeForm');
+    form.insertBefore(wrap, form.querySelector('.form-row'));
+  }
+
   // ?title= 로 넘어온 제목을 미리 채운다 (business.html의 "이런 글을 기다려요").
   const prefilledTitle = BusinessPage.prefillTitle(new URLSearchParams(location.search).get('title'));
   if (prefilledTitle) document.getElementById('title').value = prefilledTitle;
@@ -481,6 +506,7 @@
           password: form.password.value,
           honeypot: form.website.value,
           images,
+          ...(adminKeyInput ? { adminKey: adminKeyInput.value } : {}),
         }),
       });
       const data = await res.json();
