@@ -1,13 +1,14 @@
 // 실행: node --test
 import test from 'node:test';
 import assert from 'node:assert/strict';
-import { cleanSummary, findSummaryProblem, fixDateOrder } from '../api/cron/update-companies.js';
+import { cleanSummary, dropStaleLines, findSummaryProblem, fixDateOrder } from '../api/cron/update-companies.js';
 
 const OCT_3 = new Date('2026-10-03T03:00:00Z');
 const JAN_5 = new Date('2027-01-05T03:00:00Z');
+const OCT_6 = new Date('2026-10-06T03:00:00Z');
 
 // 크론이 실제로 거치는 순서대로 검사한다.
-const problemOf = (text, now) => findSummaryProblem(cleanSummary(fixDateOrder(text)), now);
+const problemOf = (text, now) => findSummaryProblem(cleanSummary(dropStaleLines(fixDateOrder(text), now)), now);
 
 test('cleanSummary: 같은 모델을 다시 말하는 줄은 제거', () => {
   assert.equal(
@@ -76,4 +77,39 @@ test('findSummaryProblem: 1월에 본 12월 날짜는 작년으로 보고 통과
 test('findSummaryProblem: 정상 요약 통과 (Claude Opus (9/22))', () => {
   assert.equal(problemOf('Anthropic이 Claude Opus 5.5를 출시했다. (9/22)', OCT_3), null);
   assert.equal(problemOf('Meta AI가 Muse Spark 1.3을 출시했다. (9/2)', OCT_3), null);
+});
+
+test('dropStaleLines: 90일 넘은 소식만 있으면 전부 제거 (Mistral "최근 2024년 9월 Pixtral 출시")', () => {
+  assert.equal(dropStaleLines('미스트랄은 최근 2024년 9월 Pixtral을 출시했다.', OCT_6), '');
+  assert.equal(dropStaleLines(fixDateOrder('9월 2024년 Pixtral 출시'), OCT_6), '');
+});
+
+test('dropStaleLines: 오래된 줄만 빼고 나머지는 유지', () => {
+  assert.equal(
+    dropStaleLines('Mistral Medium 3.5가 출시되었다. (9/30)\n2024년 9월 Pixtral 12B가 출시되었다.\n가격은 공개되지 않았다.', OCT_6),
+    'Mistral Medium 3.5가 출시되었다. (9/30)\n가격은 공개되지 않았다.'
+  );
+});
+
+test('dropStaleLines: 90일 경계 (10/6 기준 7/8 통과, 7/7 제거)', () => {
+  assert.equal(dropStaleLines('가 출시되었다. (7/8)', OCT_6), '가 출시되었다. (7/8)');
+  assert.equal(dropStaleLines('가 출시되었다. (7/7)', OCT_6), '');
+  assert.equal(dropStaleLines('가 6월 30일 출시되었다.', OCT_6), '');
+});
+
+test('dropStaleLines: 일자가 없는 달은 그 달 말일로 본다', () => {
+  assert.equal(dropStaleLines('2026년 7월 출시되었다.', OCT_6), '2026년 7월 출시되었다.');
+  assert.equal(dropStaleLines('2026년 6월 출시되었다.', OCT_6), '');
+  assert.equal(dropStaleLines('지난 5월 출시되었다.', OCT_6), '');
+  assert.equal(dropStaleLines('2025년 출시되었다.', OCT_6), '');
+});
+
+test('dropStaleLines: 한 줄에 날짜가 여럿이면 가장 최근 날짜로 판단', () => {
+  const text = '2024년 9월 나온 Pixtral의 후속 모델이 출시되었다. (10/1)';
+  assert.equal(dropStaleLines(text, OCT_6), text);
+});
+
+test('dropStaleLines: 1월에 본 12월 날짜는 작년으로 보고 유지, 9월 날짜는 제거', () => {
+  assert.equal(dropStaleLines('Gemini 4 출시 (12/28)', JAN_5), 'Gemini 4 출시 (12/28)');
+  assert.equal(dropStaleLines('Gemini 4 출시 (9/28)', JAN_5), '');
 });

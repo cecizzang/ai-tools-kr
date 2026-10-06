@@ -1,11 +1,11 @@
 export const config = { maxDuration: 60 };
 
 const COMPANIES = [
-  { id: 'anthropic', name: 'Anthropic', queryBase: 'Anthropic Claude latest model release update' },
-  { id: 'openai',    name: 'OpenAI',    queryBase: 'OpenAI GPT latest model release update' },
-  { id: 'google',    name: 'Google DeepMind', queryBase: 'Google Gemini latest model release update' },
-  { id: 'meta',      name: 'Meta AI',   queryBase: 'Meta AI Muse Llama latest model release update' },
-  { id: 'mistral',   name: 'Mistral AI', queryBase: 'Mistral AI latest model release update' },
+  { id: 'anthropic', name: 'Anthropic', nameKo: '앤트로픽', queryBase: 'Anthropic Claude latest model release update' },
+  { id: 'openai',    name: 'OpenAI',    nameKo: '오픈AI', queryBase: 'OpenAI GPT latest model release update' },
+  { id: 'google',    name: 'Google DeepMind', nameKo: '구글', queryBase: 'Google Gemini latest model release update' },
+  { id: 'meta',      name: 'Meta AI',   nameKo: '메타', queryBase: 'Meta AI Muse Llama latest model release update' },
+  { id: 'mistral',   name: 'Mistral AI', nameKo: '미스트랄', queryBase: 'Mistral AI latest model release update' },
 ];
 
 const MIN_SUMMARY_LENGTH = 20;
@@ -28,6 +28,15 @@ const KST_OFFSET_MS = 9 * 60 * 60 * 1000;
 const DAY_MS = 24 * 60 * 60 * 1000;
 // A yearless date further ahead than this is taken as last year's (e.g. "(12/28)" seen in January).
 const LAST_YEAR_THRESHOLD_MS = 60 * DAY_MS;
+// News dated longer ago than this isn't "recent" any more.
+const STALE_AFTER_MS = 90 * DAY_MS;
+
+// Today in KST, as a UTC-midnight timestamp plus its year.
+function kstToday(now) {
+  const kstNow = new Date(now.getTime() + KST_OFFSET_MS);
+  const year = kstNow.getUTCFullYear();
+  return { year, today: Date.UTC(year, kstNow.getUTCMonth(), kstNow.getUTCDate()) };
+}
 
 // "9월 2026년" → "2026년 9월"
 export function fixDateOrder(text) {
@@ -77,6 +86,45 @@ function isDuplicateLine(a, b) {
   return shared >= smaller * DUPLICATE_WORD_OVERLAP;
 }
 
+// Every date a line mentions, each read as late as it can be: "2026년 7월" is July 31,
+// "2024년" is December 31, and a yearless date is this year's unless that puts it
+// more than 60 days ahead, in which case it's last year's.
+function lineDates(line, year, today) {
+  const dates = [];
+  const addYearless = (month, day) => {
+    const m = Number(month) - 1;
+    const earliest = Date.UTC(year, m, day ? Number(day) : 1);
+    const y = earliest - today > LAST_YEAR_THRESHOLD_MS ? year - 1 : year;
+    dates.push(day ? Date.UTC(y, m, Number(day)) : Date.UTC(y, m + 1, 0));
+  };
+  for (const m of line.matchAll(/\((\d{1,2})\/(\d{1,2})(?:,\s*(\d{1,2})\/(\d{1,2}))?\)/g)) {
+    addYearless(m[1], m[2]);
+    if (m[3]) addYearless(m[3], m[4]);
+  }
+  for (const m of line.matchAll(/(?<!\d)(\d{4})년(?:\s*(\d{1,2})월(?:\s*(\d{1,2})일)?)?/g)) {
+    const y = Number(m[1]);
+    if (m[3]) dates.push(Date.UTC(y, Number(m[2]) - 1, Number(m[3])));
+    else dates.push(Date.UTC(y, m[2] ? Number(m[2]) : 12, 0));
+  }
+  for (const m of line.matchAll(/(?<!\d{4}년\s*)(?<!\d)(\d{1,2})월(?:\s*(\d{1,2})일)?/g)) {
+    addYearless(m[1], m[2]);
+  }
+  return dates;
+}
+
+// Drops lines whose news is over 90 days old. A line is judged by its newest date, so
+// "2024년 나온 X의 후속 Y 출시 (10/1)" stays; lines with no date at all stay too.
+export function dropStaleLines(text, now = new Date()) {
+  const { year, today } = kstToday(now);
+  return text
+    .split('\n')
+    .filter((line) => {
+      const dates = lineDates(line, year, today);
+      return dates.length === 0 || today - Math.max(...dates) <= STALE_AFTER_MS;
+    })
+    .join('\n');
+}
+
 export function cleanSummary(text) {
   const kept = [];
   for (const line of text.split('\n').map((l) => l.trim()).filter(Boolean)) {
@@ -97,9 +145,7 @@ export function findSummaryProblem(text, now = new Date()) {
 
   // Dates without a year are read as this year (KST). Anything after KST tomorrow is rejected,
   // unless it's more than 60 days ahead — then it's really last year's date and passes.
-  const kstNow = new Date(now.getTime() + KST_OFFSET_MS);
-  const year = kstNow.getUTCFullYear();
-  const today = Date.UTC(year, kstNow.getUTCMonth(), kstNow.getUTCDate());
+  const { year, today } = kstToday(now);
   const limit = today + DAY_MS;
 
   const dates = [];
@@ -119,6 +165,7 @@ export function findSummaryProblem(text, now = new Date()) {
 }
 
 function buildSystemPrompt(todayKR) {
+  const companyNamesKo = COMPANIES.map((c) => `${c.name.split(' ')[0]}→${c.nameKo}`).join(', ');
   return `You are a concise AI model release tracker.
 오늘 날짜는 ${todayKR}입니다.
 The user will ask about recent model releases and updates from a specific AI company.
@@ -129,11 +176,13 @@ Search the web and return a clear summary in Korean.
 더 최신 버전이 이미 나왔는데 오래된 버전을 최신이라고 쓰지 마.
 
 작성 규칙:
-- 모든 문장은 한국어로 써. 회사명·모델명 같은 고유명사만 영어로 써도 돼.
+- 모든 문장은 한국어로 써. 모델명·제품명 같은 고유명사만 영어로 써도 돼.
+- 회사명은 한글 이름으로 쓰고 조사도 그 한글 이름에 맞춰 붙여 (${companyNamesKo}). 예: "Google는"이 아니라 "구글은", "Meta은"이 아니라 "메타는".
 - 검색 과정, "확인이 필요합니다", "추가 검색" 같은 메타 발언은 절대 쓰지 마. 결과 요약만 써.
-- 1년 넘은 소식이나 오늘(${todayKR})보다 미래 날짜의 소식은 쓰지 마.
+- 90일 넘은 소식이나 오늘(${todayKR})보다 미래 날짜의 소식은 쓰지 마.
 - 날짜를 글로 쓸 때 "9월 2026년" 같은 어순은 쓰지 말고 "2026년 9월"처럼 써.
 - 파라미터 수 같은 큰 숫자는 쓰지 마.
+- 가격을 쓸 때는 반드시 "100만 토큰당 입력 $X / 출력 $Y" 형식으로만 써 (예: 100만 토큰당 입력 $2 / 출력 $6). 다른 단위나 어순으로 쓰지 말고, 입력·출력 가격을 둘 다 알지 못하면 가격은 아예 쓰지 마.
 
 날짜 표기 규칙:
 - 각 문장이 다루는 소식 자체에 날짜가 명시되어 있는 경우에만 그 문장 끝에 (M/D) 형식으로 표시해.
@@ -190,7 +239,13 @@ async function fetchCompanySummary(company, now = new Date()) {
   let textBlocks = data.content.slice(lastSearchIndex + 1).filter((b) => b.type === 'text');
   if (textBlocks.length === 0) textBlocks = data.content.filter((b) => b.type === 'text');
 
-  const text = cleanSummary(fixDateOrder(textBlocks.map((b) => b.text).join('')));
+  const raw = fixDateOrder(textBlocks.map((b) => b.text).join(''));
+  const fresh = dropStaleLines(raw, now);
+  if (raw.trim() && !fresh.trim()) {
+    console.log(`[${company.id}] every line is over 90 days old, skipping: text=${JSON.stringify(raw)}`);
+    return null;
+  }
+  const text = cleanSummary(fresh);
 
   console.log(`[${company.id}] content blocks=${data.content.map((b) => b.type).join(',')} extracted text length=${text.length}`);
 
@@ -234,6 +289,7 @@ async function saveCompanyUpdate(company, summary) {
 
 // Retries a bad or failed summary once, if there's still time. Supabase errors aren't retried,
 // and if every attempt fails nothing is saved, so the previous summary stays in place.
+// A summary with only stale news is skipped without a retry, also leaving the previous one.
 async function updateCompany(company, startedAt) {
   let lastError;
   for (let attempt = 1; attempt <= MAX_ATTEMPTS; attempt++) {
@@ -252,8 +308,9 @@ async function updateCompany(company, startedAt) {
       console.error(`[${company.id}] attempt ${attempt}/${MAX_ATTEMPTS} failed: ${err.message}`);
       continue;
     }
+    if (summary === null) return { id: company.id, skipped: true };
     await saveCompanyUpdate(company, summary);
-    return company.id;
+    return { id: company.id, skipped: false };
   }
   throw lastError;
 }
@@ -270,15 +327,16 @@ export default async function handler(req, res) {
   );
 
   const updated = [];
+  const skipped = [];
   const failed = [];
 
   results.forEach((result, i) => {
     if (result.status === 'fulfilled') {
-      updated.push(result.value);
+      (result.value.skipped ? skipped : updated).push(result.value.id);
     } else {
       failed.push({ id: COMPANIES[i].id, reason: result.reason.message });
     }
   });
 
-  return res.status(200).json({ updated, failed });
+  return res.status(200).json({ updated, skipped, failed });
 }
