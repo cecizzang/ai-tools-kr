@@ -171,6 +171,19 @@
       width: 48px;
     }
 
+    .official-badge {
+      display: inline-block;
+      font-family: 'IBM Plex Mono', monospace;
+      font-size: 10px;
+      line-height: 1.5;
+      color: var(--accent);
+      border: 1px solid var(--accent);
+      border-radius: 4px;
+      padding: 0 5px;
+      margin-right: 6px;
+      vertical-align: 1px;
+    }
+
     .board-preview-title {
       flex: 1;
       min-width: 0;
@@ -440,6 +453,7 @@
   <p>회사 소식은 AI가 자동 요약한 정보로 부정확할 수 있습니다</p>
 </footer>
 
+<script src="official.js"></script>
 <script>
   // Publishable key is safe to expose client-side by design (RLS enforces access control server-side).
   const SUPABASE_URL = 'https://clpwrmxegqvzzcqcxdsa.supabase.co';
@@ -473,15 +487,18 @@
     }).catch(() => {}); // best-effort logging — never block the user's action on this failing
   }
 
-  const POST_CATEGORY_LABELS = { notice: '공지사항', free: '일반', dev: '개발' };
+  const POST_CATEGORY_LABELS = { notice: '공지사항', free: '일반', dev: '개발', business: '사장님' };
 
-  async function fetchPosts(url) {
-    const res = await fetch(url, {
+  // query는 select 뒤에 붙는 조건·정렬. 운영자 배지를 위해 is_official도 같이 읽는다.
+  async function fetchPosts(query) {
+    const buildUrl = (official) =>
+      `${SUPABASE_URL}/rest/v1/posts?select=id,category,nickname,title,created_at${official ? ',is_official' : ''},comments(id)&${query}`;
+    const { res } = await OfficialPosts.fetchWithOfficial(buildUrl, (url) => fetch(url, {
       headers: {
         apikey: SUPABASE_ANON_KEY,
         Authorization: `Bearer ${SUPABASE_ANON_KEY}`,
       },
-    });
+    }));
     if (!res.ok) throw new Error(`status ${res.status}`);
     return res.json();
   }
@@ -509,7 +526,8 @@
 
     const meta = document.createElement('span');
     meta.className = 'board-preview-meta';
-    meta.textContent = `${row.nickname} · ${formatRelativeTime(row.created_at)}`;
+    if (OfficialPosts.isOfficial(row)) meta.appendChild(OfficialPosts.officialBadge());
+    meta.appendChild(document.createTextNode(`${row.nickname} · ${formatRelativeTime(row.created_at)}`));
 
     a.appendChild(cat);
     a.appendChild(title);
@@ -534,12 +552,11 @@
     // comments(count) triggers a Postgres count(*) permission check that the
     // column-restricted comments grant doesn't satisfy — fetch comments(id)
     // and count client-side instead (same fix as board.html).
-    const select = 'select=id,category,nickname,title,created_at,comments(id)';
 
     try {
       const [noticeRows, postRows] = await Promise.all([
-        fetchPosts(`${SUPABASE_URL}/rest/v1/posts?${select}&category=eq.notice&order=created_at.desc&limit=1`),
-        fetchPosts(`${SUPABASE_URL}/rest/v1/posts?${select}&category=neq.notice&order=created_at.desc&limit=5`),
+        fetchPosts('category=eq.notice&order=created_at.desc&limit=1'),
+        fetchPosts('category=neq.notice&order=created_at.desc&limit=5'),
       ]);
 
       const rows = [...noticeRows, ...postRows];

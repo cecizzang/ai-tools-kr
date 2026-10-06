@@ -3,7 +3,7 @@
 (function (root) {
   const PREVIEW_LENGTH = 60;
   const RECOMMENDED_TOOL_COUNT = 6;
-  // 글이 이보다 적으면 목록 아래에 "이런 글을 기다려요"를 보여 준다.
+  // 사장님들의 글(운영자 글 제외)이 이보다 적으면 목록 아래에 "이런 글을 기다려요"를 보여 준다.
   const MIN_POSTS_WITHOUT_PROMPTS = 3;
   const TITLE_MAX_LENGTH = 60;
 
@@ -50,8 +50,8 @@
     return Array.from(String(value ?? '').replace(/\s+/g, ' ').trim()).slice(0, TITLE_MAX_LENGTH).join('');
   }
 
-  function shouldShowPrompts(totalPosts) {
-    return totalPosts < MIN_POSTS_WITHOUT_PROMPTS;
+  function shouldShowPrompts(ownerPostCount) {
+    return ownerPostCount < MIN_POSTS_WITHOUT_PROMPTS;
   }
 
   const api = {

@@ -154,6 +154,63 @@
       flex-shrink: 0;
     }
 
+    .official-badge {
+      display: inline-block;
+      font-family: 'IBM Plex Mono', monospace;
+      font-size: 10px;
+      line-height: 1.5;
+      color: var(--accent);
+      border: 1px solid var(--accent);
+      border-radius: 4px;
+      padding: 0 5px;
+      margin-right: 6px;
+      vertical-align: 1px;
+    }
+
+    .guide-grid {
+      display: grid;
+      grid-template-columns: repeat(3, 1fr);
+      gap: 10px;
+    }
+
+    .guide-card {
+      min-width: 0;
+      background: var(--surface);
+      border: 1px solid var(--border);
+      border-radius: 10px;
+      padding: 16px;
+      text-decoration: none;
+      color: var(--text);
+      display: flex;
+      flex-direction: column;
+      gap: 8px;
+    }
+
+    .guide-card:hover { border-color: var(--accent); }
+
+    .guide-card .title {
+      font-size: 14px;
+      font-weight: 600;
+      line-height: 1.5;
+    }
+
+    .guide-card .preview {
+      font-size: 12px;
+      color: var(--muted);
+      line-height: 1.6;
+      display: -webkit-box;
+      -webkit-line-clamp: 2;
+      -webkit-box-orient: vertical;
+      overflow: hidden;
+    }
+
+    .guide-card .meta {
+      margin-top: auto;
+      font-size: 12px;
+      color: var(--muted);
+      font-family: 'IBM Plex Mono', monospace;
+    }
+
     .section {
       max-width: 900px;
       margin: 0 auto 24px;
@@ -207,7 +264,15 @@
       padding-bottom: 6px;
       scroll-snap-type: x proximity;
       -webkit-overflow-scrolling: touch;
+      /* 기본 흰 스크롤바 대신 다크 테마에 맞는 얇은 스크롤바 */
+      scrollbar-width: thin;
+      scrollbar-color: #2a2a36 transparent;
     }
+
+    .tool-strip::-webkit-scrollbar { height: 6px; }
+    .tool-strip::-webkit-scrollbar-track { background: transparent; }
+    .tool-strip::-webkit-scrollbar-thumb { background: #2a2a36; border-radius: 3px; }
+    .tool-strip::-webkit-scrollbar-thumb:hover { background: #3a3a4a; }
 
     .tool-card {
       flex: 0 0 180px;
@@ -316,6 +381,7 @@
 
     @media (max-width: 600px) {
       .shortcuts { grid-template-columns: 1fr; }
+      .guide-grid { grid-template-columns: 1fr; }
       .tool-card { flex-basis: 150px; }
       .intro-card .btn { width: 100%; justify-content: center; }
       .post-row { flex-wrap: wrap; row-gap: 6px; padding: 14px 16px; }
@@ -397,6 +463,11 @@
   <div class="shortcuts" id="shortcuts"></div>
 </section>
 
+<section class="section" id="guideSection" hidden>
+  <div class="section-head"><h2>운영자 가이드</h2></div>
+  <div class="guide-grid" id="guideList"></div>
+</section>
+
 <section class="section">
   <div class="section-head"><h2>사장님들의 글</h2></div>
   <div class="post-list" id="postList"></div>
@@ -407,12 +478,16 @@
   <div class="pagination" id="pagination"></div>
 </section>
 
+<script src="official.js"></script>
 <script src="business.js"></script>
 <script>
   const SUPABASE_URL = 'https://clpwrmxegqvzzcqcxdsa.supabase.co';
   const SUPABASE_ANON_KEY = 'sb_publishable_PiSGtCuULXpdHlOgYdWK0A_jmTgqIXQ';
   const PAGE_SIZE = 20;
+  const GUIDE_COUNT = 3;
   const CATEGORY = 'business';
+  const POST_COLUMNS = 'id,category,nickname,title,body,created_at';
+  const SUPABASE_HEADERS = { apikey: SUPABASE_ANON_KEY, Authorization: `Bearer ${SUPABASE_ANON_KEY}` };
 
   function getParams() {
     const p = new URLSearchParams(location.search);
@@ -500,9 +575,7 @@
   // 추천 툴을 못 불러오거나 조건에 맞는 툴이 없으면 줄 자체를 숨겨 둔다.
   async function loadTools() {
     try {
-      const res = await fetch(BusinessPage.recommendedToolsUrl(SUPABASE_URL), {
-        headers: { apikey: SUPABASE_ANON_KEY, Authorization: `Bearer ${SUPABASE_ANON_KEY}` },
-      });
+      const res = await fetch(BusinessPage.recommendedToolsUrl(SUPABASE_URL), { headers: SUPABASE_HEADERS });
       if (!res.ok) return;
       const tools = await res.json();
       if (!Array.isArray(tools) || tools.length === 0) return;
@@ -558,14 +631,13 @@
     }
   }
 
-  async function fetchPosts(url) {
-    const res = await fetch(url, {
-      headers: {
-        apikey: SUPABASE_ANON_KEY,
-        Authorization: `Bearer ${SUPABASE_ANON_KEY}`,
-        Prefer: 'count=exact',
-      },
-    });
+  // 사장님들의 글: is_official=false인 글만. is_official을 아직 읽을 수 없으면 전체 글을 그대로 보여 준다.
+  async function fetchOwnerPosts(offset) {
+    const buildUrl = (official) =>
+      `${SUPABASE_URL}/rest/v1/posts?select=${POST_COLUMNS},comments(id)&category=eq.${CATEGORY}` +
+      `${official ? '&is_official=eq.false' : ''}&order=created_at.desc&limit=${PAGE_SIZE}&offset=${offset}`;
+    const { res } = await OfficialPosts.fetchWithOfficial(buildUrl, (url) =>
+      fetch(url, { headers: { ...SUPABASE_HEADERS, Prefer: 'count=exact' } }));
     if (!res.ok) throw new Error(`status ${res.status}`);
     const rows = await res.json();
     const range = res.headers.get('content-range');
@@ -573,22 +645,55 @@
     return { rows, total };
   }
 
+  function buildGuideCard(row) {
+    const a = el('a', 'guide-card');
+    a.href = `post.html?id=${encodeURIComponent(row.id)}`;
+
+    const title = el('span', 'title');
+    title.appendChild(OfficialPosts.officialBadge());
+    title.appendChild(document.createTextNode(row.title));
+    a.appendChild(title);
+
+    const previewText = BusinessPage.previewText(row.body);
+    if (previewText) a.appendChild(el('span', 'preview', previewText));
+    a.appendChild(el('span', 'meta', `${formatRelativeTime(row.created_at)} · 댓글 ${row.comments?.length || 0}`));
+    return a;
+  }
+
+  // 운영자 가이드: is_official=true인 글 최신 3개. 없거나 못 읽으면 구역을 숨겨 둔다.
+  async function loadGuides() {
+    try {
+      const res = await fetch(
+        `${SUPABASE_URL}/rest/v1/posts?select=${POST_COLUMNS},is_official,comments(id)&category=eq.${CATEGORY}` +
+        `&is_official=eq.true&order=created_at.desc&limit=${GUIDE_COUNT}`,
+        { headers: SUPABASE_HEADERS }
+      );
+      if (!res.ok) return;
+      const rows = (await res.json()).filter(OfficialPosts.isOfficial);
+      if (rows.length === 0) return;
+
+      const list = document.getElementById('guideList');
+      rows.forEach((row) => list.appendChild(buildGuideCard(row)));
+      document.getElementById('guideSection').hidden = false;
+    } catch (err) {
+      // 가이드는 부가 요소라 실패해도 나머지 화면은 그대로 보여 준다.
+    }
+  }
+
   async function loadPosts() {
     const { page } = getParams();
     const offset = (page - 1) * PAGE_SIZE;
-    const select = 'select=id,category,nickname,title,body,created_at,comments(id)';
-    const url = `${SUPABASE_URL}/rest/v1/posts?${select}&category=eq.${CATEGORY}&order=created_at.desc&limit=${PAGE_SIZE}&offset=${offset}`;
 
     const listEl = document.getElementById('postList');
     listEl.textContent = '';
 
     try {
-      const { rows, total } = await fetchPosts(url);
+      const { rows, total } = await fetchOwnerPosts(offset);
 
       if (rows.length === 0) {
         const empty = document.createElement('div');
         empty.className = 'empty';
-        empty.textContent = '아직 게시글이 없습니다.';
+        empty.textContent = '아직 글이 없어요. 첫 글을 남겨주세요';
         listEl.appendChild(empty);
       } else {
         rows.forEach((row) => listEl.appendChild(buildRow(row)));
@@ -607,6 +712,7 @@
 
   renderShortcuts();
   loadTools();
+  loadGuides();
   loadPosts();
 </script>
 </body>

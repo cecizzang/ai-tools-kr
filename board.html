@@ -158,6 +158,19 @@
       width: 56px;
     }
 
+    .official-badge {
+      display: inline-block;
+      font-family: 'IBM Plex Mono', monospace;
+      font-size: 10px;
+      line-height: 1.5;
+      color: var(--accent);
+      border: 1px solid var(--accent);
+      border-radius: 4px;
+      padding: 0 5px;
+      margin-right: 6px;
+      vertical-align: 1px;
+    }
+
     .post-row .title {
       flex: 1;
       font-size: 14px;
@@ -227,6 +240,7 @@
 <div class="post-list" id="postList"></div>
 <div class="pagination" id="pagination"></div>
 
+<script src="official.js"></script>
 <script>
   const SUPABASE_URL = 'https://clpwrmxegqvzzcqcxdsa.supabase.co';
   const SUPABASE_ANON_KEY = 'sb_publishable_PiSGtCuULXpdHlOgYdWK0A_jmTgqIXQ';
@@ -292,7 +306,8 @@
 
     const meta = document.createElement('span');
     meta.className = 'meta';
-    meta.textContent = `${row.nickname} · ${formatRelativeTime(row.created_at)}`;
+    if (OfficialPosts.isOfficial(row)) meta.appendChild(OfficialPosts.officialBadge());
+    meta.appendChild(document.createTextNode(`${row.nickname} · ${formatRelativeTime(row.created_at)}`));
 
     a.appendChild(cat);
     a.appendChild(title);
@@ -335,14 +350,17 @@
     }
   }
 
-  async function fetchPosts(url) {
-    const res = await fetch(url, {
+  // query는 select 뒤에 붙는 조건·정렬. 운영자 배지를 위해 is_official도 같이 읽는다.
+  async function fetchPosts(query) {
+    const buildUrl = (official) =>
+      `${SUPABASE_URL}/rest/v1/posts?select=id,category,nickname,title,created_at${official ? ',is_official' : ''},comments(id)&${query}`;
+    const { res } = await OfficialPosts.fetchWithOfficial(buildUrl, (url) => fetch(url, {
       headers: {
         apikey: SUPABASE_ANON_KEY,
         Authorization: `Bearer ${SUPABASE_ANON_KEY}`,
         Prefer: 'count=exact',
       },
-    });
+    }));
     if (!res.ok) throw new Error(`status ${res.status}`);
     const rows = await res.json();
     const range = res.headers.get('content-range');
@@ -355,21 +373,19 @@
     renderTabs(category);
 
     const offset = (page - 1) * PAGE_SIZE;
-    const select = 'select=id,category,nickname,title,created_at,comments(id)';
-    let url = `${SUPABASE_URL}/rest/v1/posts?${select}&order=created_at.desc&limit=${PAGE_SIZE}&offset=${offset}`;
-    url += category === 'all' ? '&category=neq.notice' : `&category=eq.${category}`;
+    let query = `order=created_at.desc&limit=${PAGE_SIZE}&offset=${offset}`;
+    query += category === 'all' ? '&category=neq.notice' : `&category=eq.${category}`;
 
     const listEl = document.getElementById('postList');
     listEl.textContent = '';
 
     try {
       if (category === 'all' && page === 1) {
-        const noticeUrl = `${SUPABASE_URL}/rest/v1/posts?${select}&category=eq.notice&order=created_at.desc&limit=5`;
-        const { rows: noticeRows } = await fetchPosts(noticeUrl);
+        const { rows: noticeRows } = await fetchPosts('category=eq.notice&order=created_at.desc&limit=5');
         noticeRows.forEach((row) => listEl.appendChild(buildRow(row)));
       }
 
-      const { rows, total } = await fetchPosts(url);
+      const { rows, total } = await fetchPosts(query);
 
       if (rows.length === 0 && listEl.children.length === 0) {
         const empty = document.createElement('div');
