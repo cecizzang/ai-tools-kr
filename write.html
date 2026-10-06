@@ -275,6 +275,7 @@
   <button type="submit" class="btn" id="submitBtn">등록</button>
 </form>
 
+<script src="business.js"></script>
 <script>
   // A category passed via ?category= (e.g. from business.html's "글쓰기" button)
   // locks the field instead of showing the picker, so that page can feel like
@@ -286,6 +287,10 @@
     categoryField.value = lockedCategory;
     categoryField.closest('div').style.display = 'none';
   }
+
+  // ?title= 로 넘어온 제목을 미리 채운다 (business.html의 "이런 글을 기다려요").
+  const prefilledTitle = BusinessPage.prefillTitle(new URLSearchParams(location.search).get('title'));
+  if (prefilledTitle) document.getElementById('title').value = prefilledTitle;
 
   const MAX_IMAGES = 4;
   const MAX_ORIGINAL_BYTES = 5 * 1024 * 1024;
