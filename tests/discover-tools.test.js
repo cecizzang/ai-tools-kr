@@ -14,6 +14,8 @@ const tool = (overrides = {}) => ({
   korean: 'partial',
   target: 'both',
   released: '2026-09',
+  launched: '2025-01',
+  evidence: '',
   ...overrides,
 });
 

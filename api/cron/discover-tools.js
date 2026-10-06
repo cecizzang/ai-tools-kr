@@ -2,19 +2,40 @@ import { findSummaryProblem } from './update-companies.js';
 
 export const config = { maxDuration: 60 };
 
-// 한 번 실행에 최대 이만큼만 신규 제안 — 비용 통제 + 스팸성 대량 삽입 방지.
+// 한 회차에 최대 이만큼만 추가 — 비용 통제 + 스팸성 대량 삽입 방지.
 const MAX_NEW_TOOLS_PER_RUN = 5;
+// 카테고리 요청 하나가 내야 하는 후보 수.
+const MIN_PROPOSALS_PER_CATEGORY = 2;
+const MAX_PROPOSALS_PER_CATEGORY = 4;
+// 카테고리 요청 하나가 쓸 수 있는 웹 검색 횟수.
+const MAX_WEB_SEARCHES_PER_REQUEST = 5;
 // released가 이보다 오래된 툴은 "최근 툴"이 아니므로 저장하지 않는다.
 const MAX_RELEASED_AGE_MONTHS = 12;
+// 출시된 지 이만큼이 안 된 툴은 사용자 근거(evidence)가 있어야 저장한다.
+const MIN_LAUNCH_AGE_MONTHS = 6;
+const MIN_EVIDENCE_LENGTH = 10;
 
 const CATEGORY_LABELS = {
   chat: '대화형 AI', writing: '글쓰기·번역', image: '이미지·디자인',
   media: '영상·음성', dev: '코딩·개발', automation: '자동화·업무', docs: '문서·회의',
 };
+const CATEGORY_IDS = Object.keys(CATEGORY_LABELS);
+
+const DAY_MS = 24 * 60 * 60 * 1000;
+const KST_OFFSET_MS = 9 * 60 * 60 * 1000;
+
+// 이번 회차에 찾을 카테고리. 7개를 2주에 한 바퀴 돈다 — 한 주는 앞 4개, 다음 주는 뒤 3개.
+// 주는 한국 시간 월요일에 바뀌므로 같은 주에 수동으로 다시 돌려도 같은 카테고리가 나온다.
+export function categoriesForRun(now = new Date()) {
+  const kstDay = Math.floor((now.getTime() + KST_OFFSET_MS) / DAY_MS);
+  // 1970-01-01이 목요일이라 3일을 더해 월요일 시작으로 맞춘다.
+  const week = Math.floor((kstDay + 3) / 7);
+  return week % 2 === 0 ? CATEGORY_IDS.slice(0, 4) : CATEGORY_IDS.slice(4);
+}
 
 const PROPOSE_TOOLS_TOOL = {
   name: 'propose_tools',
-  description: '이번에 새로 발굴한 해외 AI 툴 목록을 구조화된 형태로 반환한다. 없으면 빈 배열.',
+  description: '이번 카테고리에서 새로 발굴한 AI 툴 목록을 구조화된 형태로 반환한다.',
   input_schema: {
     type: 'object',
     properties: {
@@ -26,13 +47,15 @@ const PROPOSE_TOOLS_TOOL = {
             name: { type: 'string', description: '툴의 공식 명칭' },
             url: { type: 'string', description: '공식 웹사이트 URL (추측 금지, 실제 확인된 주소만)' },
             description: { type: 'string', description: '한국어 40자 안팎 한 문장. 과장 광고 문구 없이 핵심 기능만.' },
-            category: { type: 'string', enum: Object.keys(CATEGORY_LABELS) },
             price: { type: 'string', enum: ['free', 'freemium', 'paid'] },
             korean: { type: 'string', enum: ['full', 'partial', 'none'], description: '한국어 UI/기능 지원 수준' },
+            domestic: { type: 'boolean', description: '한국 회사가 만든 국내 서비스면 true' },
             target: { type: 'string', enum: ['dev', 'biz', 'both'], description: '1인 개발자용인지 소상공인/1인사업자용인지' },
             released: { type: 'string', description: '출시 또는 마지막 주요 업데이트 연월. YYYY-MM 형식 (예: 2026-09)' },
+            launched: { type: 'string', description: '최초 출시 연월. YYYY-MM 형식. 확인하지 못했으면 빈 문자열' },
+            evidence: { type: 'string', description: '실제 사용자가 있다는 근거를 한국어 한 문장으로 (사용자 수, 리뷰·평점, 투자 유치, 주요 매체 보도 등). 검색으로 확인하지 못했으면 빈 문자열' },
           },
-          required: ['name', 'url', 'description', 'category', 'price', 'korean', 'target', 'released'],
+          required: ['name', 'url', 'description', 'price', 'korean', 'domestic', 'target', 'released', 'launched', 'evidence'],
         },
       },
     },
@@ -40,48 +63,54 @@ const PROPOSE_TOOLS_TOOL = {
   },
 };
 
-function buildSystemPrompt(todayKR, descriptionExamples) {
-  const examples = descriptionExamples.length > 0
-    ? `\n  기존 등록 툴의 description 예시 (이 길이와 톤에 맞춰라):\n${descriptionExamples.map((t) => `  - ${t.name}: ${t.description}`).join('\n')}`
-    : '';
-
-  return `너는 한국의 1인 개발자·소상공인·1인 사업자를 위한 해외 AI 툴 큐레이터다.
+function buildSystemPrompt(todayKR) {
+  return `너는 한국의 1인 개발자·소상공인·1인 사업자를 위한 AI 툴 큐레이터다.
 오늘 날짜는 ${todayKR}이다.
 
-목표: 최근에 새로 나왔거나 최근 주목받기 시작한 해외(비한국) AI 툴 중에서,
-이 타겟에게 실제로 쓸모 있을 만한 것만 골라 최대 ${MAX_NEW_TOOLS_PER_RUN}개까지 제안해라.
+목표: 사용자가 지정한 카테고리 하나에서, 한국 사용자가 지금 실제로 쓸 만한 AI 툴을 검색해
+최소 ${MIN_PROPOSALS_PER_CATEGORY}개, 최대 ${MAX_PROPOSALS_PER_CATEGORY}개 제안해라.
 
 규칙:
-- 최근 3개월 안에 출시됐거나 주요 업데이트가 있었던 툴을 우선해라. 이미 오래전부터 널리 알려진 툴은 후순위다.
+- 지정된 카테고리에 속하는 툴만 제안해라.
+- 후보는 최소 ${MIN_PROPOSALS_PER_CATEGORY}개 이상 내라. 첫 검색에서 부족하면 검색어를 바꿔 다시 찾아라.
+  그래도 아래 조건을 만족하는 툴이 ${MIN_PROPOSALS_PER_CATEGORY}개가 안 되면, 조건에 안 맞는 툴로 채우지 말고 찾은 만큼만 반환해라.
+- 한국 사용자 기준으로 골라라. 한국어 UI·한국어 입출력을 지원하는 툴과 국내(한국) 서비스를 우선하고,
+  조건이 비슷하면 그런 툴을 먼저 제안해라. 해외 툴은 한국에서 가입해 쓸 수 있는 것만 제안해라.
+- 최근 ${MAX_RELEASED_AGE_MONTHS}개월 안에 출시됐거나 주요 업데이트가 있었던 툴만 제안해라.
+  released에는 검색으로 확인한 출시 또는 마지막 주요 업데이트 연월을 YYYY-MM 형식으로 써라. 연월을 확인하지 못한 툴은 제안하지 마라.
+- launched에는 최초 출시 연월을 YYYY-MM 형식으로 써라.
+- 출시된 지 ${MIN_LAUNCH_AGE_MONTHS}개월이 안 된 툴은, 실제 사용자가 있다는 근거(공개된 사용자 수, 리뷰·평점, 투자 유치,
+  주요 매체 보도 등)를 검색으로 확인한 경우에만 제안해라. 근거를 찾지 못한 신생 툴은 제안하지 마라.
+- evidence에는 확인한 사용자 근거를 한국어 한 문장으로 써라. 확인하지 못했으면 지어내지 말고 빈 문자열로 둬라.
 - 빅테크(OpenAI, Google, Microsoft, Meta, Anthropic, Amazon, Apple 등)의 본체 서비스나 모델 자체는 제외해라.
   예: ChatGPT, Gemini, Veo, Copilot, Claude 같은 서비스·모델은 제안하지 마라.
 - 이미 목록에 있다고 알려준 툴은 절대 다시 제안하지 마라.
 - 실제로 검색으로 확인한, 접근 가능한 공식 URL만 써라. URL을 추측하지 마라.
-- description은 한국어 40자 안팎의 한 문장으로, 과장이나 광고성 문구 없이 무슨 기능을 하는 툴인지만 정확히 써라.${examples}
+- description은 한국어 40자 안팎의 한 문장으로, 과장이나 광고성 문구 없이 무슨 기능을 하는 툴인지만 정확히 써라.
 - 가격 정보(price)는 검색으로 확인 안 되면 'freemium'으로 보수적으로 표시해라. 확신 없는 걸 'free'로 단정하지 마라.
-- released에는 검색으로 확인한 출시 또는 마지막 주요 업데이트 연월을 YYYY-MM 형식으로 써라.
-  연월을 확인하지 못했거나 ${MAX_RELEASED_AGE_MONTHS}개월보다 오래된 툴은 제안하지 마라.
-- category/price/korean/target은 반드시 주어진 값 중 하나만 써라.
-- 확신이 서는 후보가 ${MAX_NEW_TOOLS_PER_RUN}개보다 적으면 억지로 채우지 말고 그만큼만 반환해라. 없으면 빈 배열을 반환해라.
+- price/korean/target은 반드시 주어진 값 중 하나만 써라.
 - 반드시 propose_tools 도구를 호출해서만 응답해라.`;
 }
 
-function buildUserPrompt(existingNames) {
-  const existingList = existingNames.length > 0
-    ? existingNames.map((n) => `- ${n}`).join('\n')
-    : '(현재 등록된 툴 없음)';
+function buildUserPrompt(category, categoryTools, descriptionExamples) {
+  const existingList = categoryTools.length > 0
+    ? categoryTools.map((t) => `- ${t.name} (${t.url})`).join('\n')
+    : '(이 카테고리에 등록된 툴 없음)';
+  const examples = descriptionExamples.length > 0
+    ? `\n\ndescription 예시 (이 길이와 톤에 맞춰라):\n${descriptionExamples.map((t) => `- ${t.name}: ${t.description}`).join('\n')}`
+    : '';
 
-  return `아래는 이미 사이트에 등록되어 있는 툴 목록이다 (등록 대기 중인 것 포함). 이 목록에 있는 건 절대 다시 제안하지 마라:
-${existingList}
+  return `이번 카테고리: ${category} (${CATEGORY_LABELS[category]})
 
-카테고리 참고: ${Object.entries(CATEGORY_LABELS).map(([k, v]) => `${k}=${v}`).join(', ')}
+아래는 이 카테고리에 이미 등록되어 있는 툴이다 (등록 대기 중인 것 포함). 이 목록에 있는 건 절대 다시 제안하지 마라:
+${existingList}${examples}
 
-최근 새로 나왔거나 화제가 된 해외 AI 툴을 검색해서, 위 목록에 없는 것 중 한국 1인 개발자/소상공인에게 유용할 만한 걸 찾아 propose_tools로 반환해라.`;
+이 카테고리에서 한국 1인 개발자·소상공인에게 유용한 AI 툴을 검색해서, 위 목록에 없는 것을 최소 ${MIN_PROPOSALS_PER_CATEGORY}개 propose_tools로 반환해라.`;
 }
 
 async function fetchExistingTools() {
   const res = await fetch(
-    `${process.env.SUPABASE_URL}/rest/v1/tools?select=name,url,description,is_published,source&order=sort_order.asc`,
+    `${process.env.SUPABASE_URL}/rest/v1/tools?select=name,url,description,category,is_published,source&order=sort_order.asc`,
     {
       headers: {
         apikey: process.env.SUPABASE_SERVICE_ROLE_KEY,
@@ -159,19 +188,33 @@ export function findDuplicate(tool, knownTools) {
   return null;
 }
 
-// 저장하면 안 되는 제안이면 이유 문자열을, 문제없으면 null을 돌려준다.
-export function findToolProblem(tool, now = new Date()) {
-  const released = String(tool.released ?? '');
-  const m = released.match(/^(\d{4})-(0[1-9]|1[0-2])$/);
-  if (!m) return `released 형식 오류: ${released}`;
-
+// "YYYY-MM"이 지금(KST)으로부터 몇 개월 전인지. 형식이 틀리면 null.
+function monthsAgo(yearMonth, now) {
+  const m = String(yearMonth ?? '').match(/^(\d{4})-(0[1-9]|1[0-2])$/);
+  if (!m) return null;
   const [nowYear, nowMonth] = now
     .toLocaleDateString('sv-SE', { timeZone: 'Asia/Seoul' })
     .split('-')
     .map(Number);
-  const ageMonths = (nowYear * 12 + nowMonth) - (Number(m[1]) * 12 + Number(m[2]));
+  return (nowYear * 12 + nowMonth) - (Number(m[1]) * 12 + Number(m[2]));
+}
+
+// 저장하면 안 되는 제안이면 이유 문자열을, 문제없으면 null을 돌려준다.
+export function findToolProblem(tool, now = new Date()) {
+  const released = String(tool.released ?? '');
+  const ageMonths = monthsAgo(released, now);
+  if (ageMonths === null) return `released 형식 오류: ${released}`;
   if (ageMonths > MAX_RELEASED_AGE_MONTHS) return `released ${ageMonths}개월 전: ${released}`;
   if (ageMonths < 0) return `released 미래 연월: ${released}`;
+
+  // 신생 툴은 사용자 근거가 있어야 한다. 출시 연월을 모르면 신생 툴로 본다.
+  const launchAge = monthsAgo(tool.launched, now);
+  const isNew = launchAge === null || launchAge < MIN_LAUNCH_AGE_MONTHS;
+  if (isNew && String(tool.evidence ?? '').trim().length < MIN_EVIDENCE_LENGTH) {
+    return launchAge === null
+      ? '출시 연월 미확인 + 사용자 근거 없음'
+      : `출시 ${Math.max(launchAge, 0)}개월 + 사용자 근거 없음`;
+  }
 
   // 회사 소식 요약과 같은 기준으로 메타 문구·영어 섞인 문장을 걸러낸다.
   const problem = findSummaryProblem(String(tool.description ?? ''), now);
@@ -185,8 +228,8 @@ function todayKST() {
   return new Date().toLocaleDateString('sv-SE', { timeZone: 'Asia/Seoul' });
 }
 
-// pause_turn 이어받기 + propose_tools 재촉을 합친 최대 요청 횟수.
-const MAX_CLAUDE_REQUESTS = 4;
+// 카테고리 하나당 pause_turn 이어받기 + propose_tools 재촉을 합친 최대 요청 횟수.
+const MAX_CLAUDE_REQUESTS = 3;
 // 검색이 여러 번 도는 요청은 15~25초씩 걸리므로, 핸들러 시작 후 이 시간이 지나면 새 요청을 시작하지 않는다.
 const CLAUDE_START_CUTOFF_MS = 30_000;
 // 진행 중인 요청도 이 시점에 끊는다 — maxDuration(60s) 전에 Supabase 삽입과 응답까지 끝낼 여유를 남긴다.
@@ -212,7 +255,7 @@ async function callClaude(system, messages, timeoutMs) {
         max_tokens: 4000,
         system,
         tools: [
-          { type: 'web_search_20250305', name: 'web_search', max_uses: 5 },
+          { type: 'web_search_20250305', name: 'web_search', max_uses: MAX_WEB_SEARCHES_PER_REQUEST },
           PROPOSE_TOOLS_TOOL,
         ],
         // tool_choice를 propose_tools로 강제하면 web_search를 건너뛰고 바로 답해버린다.
@@ -225,7 +268,9 @@ async function callClaude(system, messages, timeoutMs) {
     data = await response.json();
   } catch (e) {
     if (e.name === 'AbortError') {
-      throw new Error(`Anthropic 요청이 ${timeoutMs}ms 안에 끝나지 않아 중단함`);
+      const timeout = new Error(`요청이 ${timeoutMs}ms 안에 끝나지 않아 중단함`);
+      timeout.name = 'TimeoutError';
+      throw timeout;
     }
     throw e;
   } finally {
@@ -233,60 +278,78 @@ async function callClaude(system, messages, timeoutMs) {
   }
 
   if (data.error) {
-    console.error(`discover-tools: Anthropic API error: status=${response.status} body=${JSON.stringify(data.error)}`);
-    throw new Error(data.error.message);
+    throw new Error(`Anthropic ${response.status} ${data.error.message}`);
   }
   return data;
 }
 
-async function proposeNewTools(existingTools, startedAt) {
-  const now = new Date();
-  const todayKR = now.toLocaleDateString('ko-KR', { year: 'numeric', month: 'long', day: 'numeric' });
-  const existingNames = existingTools.map((t) => t.name);
+// 카테고리 하나를 검색해 후보를 받아 온다. 던지지 않고 결과(status: ok / skipped / error)로 돌려준다 —
+// 한 카테고리가 실패하거나 시간이 모자라도 나머지 카테고리는 그대로 진행한다.
+async function discoverCategory(category, existingTools, startedAt, system) {
+  const outcome = {
+    category, status: 'ok', reason: null, proposed: [],
+    requests: 0, webSearches: 0, inputTokens: 0, outputTokens: 0,
+  };
+  const skip = (reason) => Object.assign(outcome, { status: 'skipped', reason });
+
+  // 토큰을 줄이려고 기존 툴은 이 카테고리 것만 넘긴다. 다른 카테고리와의 중복은 삽입 전에 코드가 걸러낸다.
+  const categoryTools = existingTools.filter((t) => t.category === category);
   // 자동으로 들어온 문구가 다시 예시가 되면 톤이 점점 틀어지므로, 사람이 쓰고 발행한 것만 쓴다.
-  const descriptionExamples = existingTools
-    .filter((t) => t.is_published && t.source === 'manual' && t.description)
-    .slice(0, 5);
+  const isExample = (t) => t.is_published && t.source === 'manual' && t.description;
+  let descriptionExamples = categoryTools.filter(isExample).slice(0, 3);
+  if (descriptionExamples.length === 0) descriptionExamples = existingTools.filter(isExample).slice(0, 3);
 
-  const system = buildSystemPrompt(todayKR, descriptionExamples);
-  const messages = [{ role: 'user', content: buildUserPrompt(existingNames) }];
-  let totalWebSearches = 0;
+  const messages = [{ role: 'user', content: buildUserPrompt(category, categoryTools, descriptionExamples) }];
 
-  for (let attempt = 1; attempt <= MAX_CLAUDE_REQUESTS; attempt++) {
-    const elapsed = Date.now() - startedAt;
-    if (elapsed > CLAUDE_START_CUTOFF_MS) {
-      throw new Error(`시간 초과 — ${elapsed}ms 동안 propose_tools 응답을 받지 못함`);
+  try {
+    for (let attempt = 1; attempt <= MAX_CLAUDE_REQUESTS; attempt++) {
+      const elapsed = Date.now() - startedAt;
+      if (elapsed > CLAUDE_START_CUTOFF_MS) {
+        skip(`시간 부족 — 시작 후 ${elapsed}ms, 요청 ${outcome.requests}회 뒤 생략`);
+        break;
+      }
+
+      const data = await callClaude(system, messages, CLAUDE_HARD_DEADLINE_MS - elapsed);
+      const webSearches = data.usage?.server_tool_use?.web_search_requests ?? 0;
+      outcome.requests += 1;
+      outcome.webSearches += webSearches;
+      outcome.inputTokens += data.usage?.input_tokens ?? 0;
+      outcome.outputTokens += data.usage?.output_tokens ?? 0;
+      console.log(
+        `discover-tools: [${category}] request #${attempt} stop_reason=${data.stop_reason} ` +
+        `web_search_requests=${webSearches} input_tokens=${data.usage?.input_tokens} ` +
+        `output_tokens=${data.usage?.output_tokens} elapsed=${Date.now() - startedAt}ms`
+      );
+
+      const toolUse = data.content.find((b) => b.type === 'tool_use' && b.name === 'propose_tools');
+      if (toolUse) {
+        outcome.proposed = Array.isArray(toolUse.input?.tools) ? toolUse.input.tools : [];
+        break;
+      }
+      if (attempt === MAX_CLAUDE_REQUESTS) {
+        throw new Error(`${MAX_CLAUDE_REQUESTS}번 요청 안에 propose_tools를 호출하지 않음`);
+      }
+
+      // 서버 쪽 web_search 루프가 중간에 멈춘 경우 — 응답을 그대로 붙여서 다시 보내면 이어서 진행한다.
+      messages.push({ role: 'assistant', content: data.content });
+      if (data.stop_reason !== 'pause_turn') {
+        // 검색만 하고 텍스트로 끝낸 경우 — 결과를 propose_tools로 정리하라고 재촉한다.
+        messages.push({
+          role: 'user',
+          content: '지금까지 검색한 결과를 바탕으로 propose_tools 도구를 호출해서 답해라.',
+        });
+      }
     }
-
-    const data = await callClaude(system, messages, CLAUDE_HARD_DEADLINE_MS - elapsed);
-    const webSearches = data.usage?.server_tool_use?.web_search_requests ?? 0;
-    totalWebSearches += webSearches;
-    console.log(
-      `discover-tools: request #${attempt} stop_reason=${data.stop_reason} ` +
-      `web_search_requests=${webSearches} (total ${totalWebSearches}) ` +
-      `input_tokens=${data.usage?.input_tokens} output_tokens=${data.usage?.output_tokens} ` +
-      `elapsed=${Date.now() - startedAt}ms`
-    );
-
-    const toolUse = data.content.find((b) => b.type === 'tool_use' && b.name === 'propose_tools');
-    if (toolUse) {
-      const proposed = Array.isArray(toolUse.input?.tools) ? toolUse.input.tools : [];
-      console.log(`discover-tools: Claude proposed ${proposed.length} tool(s) after ${totalWebSearches} web search(es)`);
-      return proposed;
-    }
-
-    // 서버 쪽 web_search 루프가 중간에 멈춘 경우 — 응답을 그대로 붙여서 다시 보내면 이어서 진행한다.
-    messages.push({ role: 'assistant', content: data.content });
-    if (data.stop_reason !== 'pause_turn') {
-      // 검색만 하고 텍스트로 끝낸 경우 — 결과를 propose_tools로 정리하라고 재촉한다.
-      messages.push({
-        role: 'user',
-        content: '지금까지 검색한 결과를 바탕으로 propose_tools 도구를 호출해서 답해라. 확신 있는 후보가 없으면 빈 배열로 호출해라.',
-      });
-    }
+  } catch (e) {
+    if (e.name === 'TimeoutError') skip(`시간 부족 — ${e.message}`);
+    else Object.assign(outcome, { status: 'error', reason: redactSecrets(e.message) });
   }
 
-  throw new Error(`Claude가 ${MAX_CLAUDE_REQUESTS}번 요청 안에 propose_tools를 호출하지 않음`);
+  console.log(
+    `discover-tools: [${category}] status=${outcome.status} proposed=${outcome.proposed.length} ` +
+    `requests=${outcome.requests} web_searches=${outcome.webSearches} reason=${outcome.reason ?? '-'}`
+  );
+  return outcome;
 }
 
 async function insertTool(tool) {
@@ -351,6 +414,12 @@ export function checkCandidate(tool, knownTools, now = new Date()) {
   return { result: 'ok', reason: null };
 }
 
+// 한 회차 추가 한도 안에서 먼저 넣을 후보를 정하는 점수 — 한국어 지원과 국내 서비스에 가산한다.
+function koreanScore(tool) {
+  const korean = { full: 2, partial: 1 }[tool?.korean] ?? 0;
+  return korean + (tool?.domestic === true ? 1 : 0);
+}
+
 // 실행 요약을 cron_runs에 남긴다 (supabase/cron-runs.sql). 테이블이 없거나 실패해도 크론은 계속된다.
 async function recordCronRun(run) {
   try {
@@ -372,51 +441,88 @@ async function recordCronRun(run) {
   }
 }
 
-// 발굴 한 회차. dryRun이면 같은 흐름을 그대로 타되 DB에는 아무것도 쓰지 않는다 (tools 삽입, cron_runs 기록 모두 생략).
-export async function runDiscovery({ dryRun = false, startedAt = Date.now() } = {}) {
+// 발굴 한 회차. 카테고리마다 따로, 동시에 요청한다.
+// dryRun이면 같은 흐름을 그대로 타되 DB에는 아무것도 쓰지 않는다 (tools 삽입, cron_runs 기록 모두 생략).
+export async function runDiscovery({ dryRun = false, startedAt = Date.now(), now = new Date(), categories = categoriesForRun(now) } = {}) {
   const existingTools = await fetchExistingTools();
-  // 같은 실행 안에서 Claude가 같은 툴을 두 번 제안하는 것도 막도록, 통과한 후보를 여기에 더해 간다.
+  const system = buildSystemPrompt(now.toLocaleDateString('ko-KR', { year: 'numeric', month: 'long', day: 'numeric' }));
+
+  const outcomes = await Promise.all(
+    categories.map((category) => discoverCategory(category, existingTools, startedAt, system))
+  );
+
+  // 후보를 한데 모아 한국어 지원·국내 서비스가 앞에 오게 한다 (같은 점수면 받은 순서 유지).
+  const proposals = outcomes
+    .flatMap((o) => o.proposed.map((tool) => ({
+      category: o.category,
+      tool: tool && typeof tool === 'object' ? { ...tool, category: o.category } : tool,
+    })))
+    .sort((a, b) => koreanScore(b.tool) - koreanScore(a.tool));
+
+  // 같은 실행 안에서 같은 툴이 두 번 제안되는 것도 막도록, 통과한 후보를 여기에 더해 간다.
   const knownTools = existingTools.map((t) => ({ name: t.name, url: t.url }));
-
-  const proposed = await proposeNewTools(existingTools, startedAt);
   const candidates = [];
+  let accepted = 0;
 
-  for (const [i, tool] of proposed.entries()) {
-    const entry = { name: tool?.name ?? null, url: tool?.url ?? null };
-    if (i >= MAX_NEW_TOOLS_PER_RUN) {
+  for (const [i, { category, tool }] of proposals.entries()) {
+    const entry = {
+      category,
+      name: tool?.name ?? null,
+      url: tool?.url ?? null,
+      evidence: tool?.evidence || null,
+      ...checkCandidate(tool, knownTools, now),
+    };
+    if (entry.result === 'ok' && accepted >= MAX_NEW_TOOLS_PER_RUN) {
       Object.assign(entry, { result: 'over_limit', reason: `회차당 최대 ${MAX_NEW_TOOLS_PER_RUN}개` });
-    } else {
-      Object.assign(entry, checkCandidate(tool, knownTools));
-      if (entry.result === 'ok') {
-        if (dryRun) {
-          entry.result = 'dry_run';
-        } else {
-          try {
-            await insertTool(tool);
-            entry.result = 'inserted';
-          } catch (e) {
-            entry.result = 'insert_error';
-            entry.reason = redactSecrets(e.message);
-          }
+    } else if (entry.result === 'ok') {
+      if (dryRun) {
+        entry.result = 'dry_run';
+      } else {
+        try {
+          await insertTool(tool);
+          entry.result = 'inserted';
+        } catch (e) {
+          entry.result = 'insert_error';
+          entry.reason = redactSecrets(e.message);
         }
-        if (entry.result !== 'insert_error') knownTools.push({ name: tool.name, url: tool.url });
+      }
+      if (entry.result !== 'insert_error') {
+        accepted += 1;
+        knownTools.push({ name: tool.name, url: tool.url });
       }
     }
     console.log(
-      `discover-tools: candidate #${i + 1} name=${JSON.stringify(entry.name)} url=${JSON.stringify(entry.url)} ` +
-      `result=${RESULT_LABELS[entry.result]} reason=${entry.reason ?? '-'}`
+      `discover-tools: candidate #${i + 1} category=${category} name=${JSON.stringify(entry.name)} ` +
+      `url=${JSON.stringify(entry.url)} result=${RESULT_LABELS[entry.result]} reason=${entry.reason ?? '-'}`
     );
     candidates.push(entry);
   }
 
+  const categorySummaries = outcomes.map(({ proposed, ...rest }) => ({ ...rest, proposed: proposed.length }));
   const insertedCount = candidates.filter((c) => c.result === 'inserted').length;
-  console.log(
-    `discover-tools: done${dryRun ? ' (dry run)' : ''} existing=${existingTools.length} ` +
-    `proposed=${proposed.length} inserted=${insertedCount}`
-  );
-  if (!dryRun) await recordCronRun({ proposed: proposed.length, inserted: insertedCount, results: candidates });
+  // 후보를 못 받은 카테고리(시간 부족으로 생략 / 요청 실패)는 한 줄로도 남긴다.
+  const categoryProblems = categorySummaries
+    .filter((c) => c.status !== 'ok')
+    .map((c) => `${c.category}: ${c.status} (${c.reason})`)
+    .join('; ') || null;
 
-  return { dryRun, proposed: proposed.length, inserted: insertedCount, candidates };
+  console.log(
+    `discover-tools: done${dryRun ? ' (dry run)' : ''} categories=${categories.join(',')} ` +
+    `existing=${existingTools.length} proposed=${proposals.length} inserted=${insertedCount} ` +
+    `web_searches=${categorySummaries.reduce((n, c) => n + c.webSearches, 0)} ` +
+    `input_tokens=${categorySummaries.reduce((n, c) => n + c.inputTokens, 0)} ` +
+    `output_tokens=${categorySummaries.reduce((n, c) => n + c.outputTokens, 0)}`
+  );
+  if (!dryRun) {
+    await recordCronRun({
+      proposed: proposals.length,
+      inserted: insertedCount,
+      results: { categories: categorySummaries, candidates },
+      error: categoryProblems,
+    });
+  }
+
+  return { dryRun, categories: categorySummaries, proposed: proposals.length, inserted: insertedCount, candidates };
 }
 
 export default async function handler(req, res) {
@@ -437,16 +543,20 @@ export default async function handler(req, res) {
 
     return res.status(200).json({
       dryRun,
+      categories: run.categories,
       inserted: names('inserted'),
       skippedDuplicates: names('duplicate'),
       skippedInvalid: withReason('invalid'),
+      skippedOverLimit: names('over_limit'),
       failed: withReason('insert_error'),
       candidates: run.candidates,
     });
   } catch (e) {
     const message = redactSecrets(e.message);
     console.error(`discover-tools: ${message}`);
-    if (!dryRun) await recordCronRun({ proposed: 0, inserted: 0, results: [], error: message });
+    if (!dryRun) {
+      await recordCronRun({ proposed: 0, inserted: 0, results: { categories: [], candidates: [] }, error: message });
+    }
     return res.status(500).json({ error: message });
   }
 }

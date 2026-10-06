@@ -12,9 +12,12 @@ create table if not exists public.cron_runs (
   ran_at timestamptz not null default now(),
   proposed integer not null default 0,
   inserted integer not null default 0,
-  -- [{ "name": ..., "url": ..., "result": "inserted|duplicate|invalid|insert_error|over_limit", "reason": ... }]
+  -- { "categories": [{ "category", "status": "ok|skipped|error", "reason", "proposed", "requests",
+  --                    "webSearches", "inputTokens", "outputTokens" }],
+  --   "candidates": [{ "category", "name", "url", "evidence",
+  --                    "result": "inserted|duplicate|invalid|insert_error|over_limit", "reason" }] }
   results jsonb not null default '[]'::jsonb,
-  -- 회차 전체가 실패했을 때의 에러 메시지 (후보 단계까지 못 간 경우)
+  -- 후보를 못 받은 카테고리(시간 부족으로 생략 / 요청 실패) 요약, 또는 회차 전체가 실패했을 때의 에러 메시지
   error text
 );
 
