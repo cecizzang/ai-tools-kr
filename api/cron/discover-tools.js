@@ -100,28 +100,63 @@ function normalizeName(name) {
   return String(name || '').trim().toLowerCase();
 }
 
-// 여러 툴이 같은 호스트를 공유하는 곳 — 호스트만 비교하면 서로 다른 툴까지 중복으로 막히므로
-// 이 호스트들은 앞쪽 경로 2단계까지 비교한다 (예: github.com/owner/repo).
+// 여러 툴이 같은 호스트를 공유하는 곳 — 이 호스트들은 경로 앞 2단계까지 같아야 같은 툴로 본다
+// (예: github.com/owner/repo).
 const SHARED_HOSTS = new Set([
   'github.com', 'gitlab.com', 'huggingface.co', 'google.com', 'chromewebstore.google.com',
   'chrome.google.com', 'play.google.com', 'apps.apple.com', 'apps.microsoft.com',
   'marketplace.visualstudio.com', 'producthunt.com', 'notion.site', 'x.com', 'twitter.com',
 ]);
 
-// 중복 판정용 키 — 보통은 호스트(www 제거)만 쓰고, 공용 호스트는 경로 앞 2단계까지 붙인다.
-// 같은 서비스의 /app, /pricing 같은 하위 경로 URL도 같은 툴로 잡힌다 (예: gemini.google.com/app).
-function urlKey(url) {
+// 어느 툴에나 있는 하위 경로 — 이것만 다르면 같은 툴이다 (예: gemini.google.com/app).
+const GENERIC_PATH_SEGMENTS = new Set([
+  'app', 'home', 'index.html', 'pricing', 'plans', 'login', 'signin', 'signup', 'register',
+  'download', 'downloads', 'features', 'about', 'docs', 'blog', 'dashboard', 'welcome',
+  'en', 'ko', 'kr', 'ja', 'jp', 'zh', 'en-us', 'en-gb', 'ko-kr', 'ja-jp', 'zh-cn', 'intl',
+]);
+
+// 중복 판정용으로 URL을 호스트(www 제거)와 툴을 구분하는 경로 조각으로 나눈다.
+function urlParts(url) {
   const raw = String(url || '').trim().toLowerCase();
   let parsed;
   try {
     parsed = new URL(/^https?:\/\//.test(raw) ? raw : `https://${raw}`);
   } catch {
-    return raw.replace(/^https?:\/\//, '').replace(/^www\./, '').replace(/\/+$/, '');
+    return { host: raw.replace(/^https?:\/\//, '').replace(/^www\./, '').replace(/\/+$/, ''), path: [], shared: false };
   }
   const host = parsed.hostname.replace(/^www\./, '');
-  if (!SHARED_HOSTS.has(host)) return host;
-  const segments = parsed.pathname.split('/').filter(Boolean).slice(0, 2);
-  return [host, ...segments].join('/');
+  const segments = parsed.pathname.split('/').filter(Boolean);
+  if (!SHARED_HOSTS.has(host)) {
+    return { host, path: segments.filter((seg) => !GENERIC_PATH_SEGMENTS.has(seg)), shared: false };
+  }
+  // 스토어류는 경로 앞 2단계가 모든 앱에 공통이라 (/us/app, /store/apps, /items) 앱 ID로 구분한다.
+  const appId =
+    parsed.searchParams.get('id') ||
+    parsed.searchParams.get('itemname') ||
+    segments.find((seg) => /^id\d+$/.test(seg));
+  return { host, path: appId ? [appId] : segments.slice(0, 2), shared: true };
+}
+
+// 호스트가 같아도 경로가 서로 다른 제품을 가리키면 다른 툴이다 (예: adobe.com/products/firefly 와
+// adobe.com/products/podcast). 한쪽 경로가 다른 쪽의 앞부분이면 같은 툴의 하위 페이지로 본다.
+function isSameUrl(a, b) {
+  if (!a.host || a.host !== b.host) return false;
+  if (a.shared) return a.path.join('/') === b.path.join('/');
+  if (a.path.length === 0 || b.path.length === 0) return a.path.length === b.path.length;
+  const shorter = Math.min(a.path.length, b.path.length);
+  return a.path.slice(0, shorter).join('/') === b.path.slice(0, shorter).join('/');
+}
+
+// 이미 있는 툴과 겹치면 어느 툴과 왜 겹치는지를, 아니면 null을 돌려준다.
+// 이름은 대소문자·앞뒤 공백만 무시한 완전 일치로만 본다 (부분 일치는 쓰지 않는다).
+export function findDuplicate(tool, knownTools) {
+  const name = normalizeName(tool.name);
+  const parts = urlParts(tool.url);
+  for (const known of knownTools) {
+    if (name && name === normalizeName(known.name)) return `이름 일치: 기존 "${known.name}"`;
+    if (isSameUrl(parts, urlParts(known.url))) return `URL 일치: 기존 "${known.name}" (${known.url})`;
+  }
+  return null;
 }
 
 // 저장하면 안 되는 제안이면 이유 문자열을, 문제없으면 null을 돌려준다.
@@ -281,8 +316,107 @@ async function insertTool(tool) {
 
   if (!res.ok) {
     const body = await res.text();
-    throw new Error(`삽입 실패 (${tool.name}): ${res.status} ${body}`);
+    throw new Error(`Supabase ${res.status} ${body}`);
   }
+}
+
+// 에러 메시지에 키가 섞여 나가지 않게 한다.
+function redactSecrets(message) {
+  let text = String(message);
+  for (const secret of [process.env.SUPABASE_SERVICE_ROLE_KEY, process.env.ANTHROPIC_API_KEY, process.env.CRON_SECRET]) {
+    if (secret) text = text.split(secret).join('[REDACTED]');
+  }
+  return text;
+}
+
+const RESULT_LABELS = {
+  inserted: '추가',
+  dry_run: '추가 예정(드라이런)',
+  duplicate: '중복',
+  invalid: '검증 탈락',
+  insert_error: 'insert 에러',
+  over_limit: '한도 초과',
+};
+
+// 후보 하나를 저장해도 되는지 판정한다 — DB나 네트워크를 건드리지 않는다.
+export function checkCandidate(tool, knownTools, now = new Date()) {
+  if (!tool || typeof tool !== 'object') return { result: 'invalid', reason: '후보가 객체가 아님' };
+  if (!String(tool.name ?? '').trim() || !String(tool.url ?? '').trim()) {
+    return { result: 'invalid', reason: 'name 또는 url 없음' };
+  }
+  const duplicate = findDuplicate(tool, knownTools);
+  if (duplicate) return { result: 'duplicate', reason: duplicate };
+  const problem = findToolProblem(tool, now);
+  if (problem) return { result: 'invalid', reason: problem };
+  return { result: 'ok', reason: null };
+}
+
+// 실행 요약을 cron_runs에 남긴다 (supabase/cron-runs.sql). 테이블이 없거나 실패해도 크론은 계속된다.
+async function recordCronRun(run) {
+  try {
+    const res = await fetch(`${process.env.SUPABASE_URL}/rest/v1/cron_runs`, {
+      method: 'POST',
+      headers: {
+        'Content-Type': 'application/json',
+        apikey: process.env.SUPABASE_SERVICE_ROLE_KEY,
+        Authorization: `Bearer ${process.env.SUPABASE_SERVICE_ROLE_KEY}`,
+        Prefer: 'return=minimal',
+      },
+      body: JSON.stringify({ job: 'discover-tools', ...run }),
+    });
+    if (!res.ok) {
+      console.warn(`discover-tools: cron_runs 기록 건너뜀: ${res.status} ${redactSecrets(await res.text())}`);
+    }
+  } catch (e) {
+    console.warn(`discover-tools: cron_runs 기록 건너뜀: ${redactSecrets(e.message)}`);
+  }
+}
+
+// 발굴 한 회차. dryRun이면 같은 흐름을 그대로 타되 DB에는 아무것도 쓰지 않는다 (tools 삽입, cron_runs 기록 모두 생략).
+export async function runDiscovery({ dryRun = false, startedAt = Date.now() } = {}) {
+  const existingTools = await fetchExistingTools();
+  // 같은 실행 안에서 Claude가 같은 툴을 두 번 제안하는 것도 막도록, 통과한 후보를 여기에 더해 간다.
+  const knownTools = existingTools.map((t) => ({ name: t.name, url: t.url }));
+
+  const proposed = await proposeNewTools(existingTools, startedAt);
+  const candidates = [];
+
+  for (const [i, tool] of proposed.entries()) {
+    const entry = { name: tool?.name ?? null, url: tool?.url ?? null };
+    if (i >= MAX_NEW_TOOLS_PER_RUN) {
+      Object.assign(entry, { result: 'over_limit', reason: `회차당 최대 ${MAX_NEW_TOOLS_PER_RUN}개` });
+    } else {
+      Object.assign(entry, checkCandidate(tool, knownTools));
+      if (entry.result === 'ok') {
+        if (dryRun) {
+          entry.result = 'dry_run';
+        } else {
+          try {
+            await insertTool(tool);
+            entry.result = 'inserted';
+          } catch (e) {
+            entry.result = 'insert_error';
+            entry.reason = redactSecrets(e.message);
+          }
+        }
+        if (entry.result !== 'insert_error') knownTools.push({ name: tool.name, url: tool.url });
+      }
+    }
+    console.log(
+      `discover-tools: candidate #${i + 1} name=${JSON.stringify(entry.name)} url=${JSON.stringify(entry.url)} ` +
+      `result=${RESULT_LABELS[entry.result]} reason=${entry.reason ?? '-'}`
+    );
+    candidates.push(entry);
+  }
+
+  const insertedCount = candidates.filter((c) => c.result === 'inserted').length;
+  console.log(
+    `discover-tools: done${dryRun ? ' (dry run)' : ''} existing=${existingTools.length} ` +
+    `proposed=${proposed.length} inserted=${insertedCount}`
+  );
+  if (!dryRun) await recordCronRun({ proposed: proposed.length, inserted: insertedCount, results: candidates });
+
+  return { dryRun, proposed: proposed.length, inserted: insertedCount, candidates };
 }
 
 export default async function handler(req, res) {
@@ -292,49 +426,27 @@ export default async function handler(req, res) {
     return res.status(401).json({ error: 'Unauthorized' });
   }
 
+  // ?dryRun=1 이면 후보 판정까지만 하고 DB에는 쓰지 않는다.
+  const dryRun = req.query?.dryRun === '1';
+
   try {
-    const existingTools = await fetchExistingTools();
-    const existingNameSet = new Set(existingTools.map((t) => normalizeName(t.name)));
-    const existingUrlKeySet = new Set(existingTools.map((t) => urlKey(t.url)));
+    const run = await runDiscovery({ dryRun, startedAt });
+    const names = (result) => run.candidates.filter((c) => c.result === result).map((c) => c.name);
+    const withReason = (result) =>
+      run.candidates.filter((c) => c.result === result).map((c) => ({ name: c.name, reason: c.reason }));
 
-    const proposed = await proposeNewTools(existingTools, startedAt);
-
-    const inserted = [];
-    const skippedDuplicates = [];
-    const skippedInvalid = [];
-    const failed = [];
-
-    for (const tool of proposed.slice(0, MAX_NEW_TOOLS_PER_RUN)) {
-      const isDuplicate =
-        existingNameSet.has(normalizeName(tool.name)) || existingUrlKeySet.has(urlKey(tool.url));
-
-      if (isDuplicate) {
-        skippedDuplicates.push(tool.name);
-        continue;
-      }
-
-      const problem = findToolProblem(tool);
-      if (problem) {
-        console.error(`discover-tools: skipped ${tool.name}: ${problem}`);
-        skippedInvalid.push({ name: tool.name, reason: problem });
-        continue;
-      }
-
-      try {
-        await insertTool(tool);
-        inserted.push(tool.name);
-        // 같은 실행 안에서 Claude가 비슷한 이름/URL을 중복 제안하는 것도 막는다.
-        existingNameSet.add(normalizeName(tool.name));
-        existingUrlKeySet.add(urlKey(tool.url));
-      } catch (e) {
-        console.error(`discover-tools: insert failed for ${tool.name}: ${e.message}`);
-        failed.push({ name: tool.name, reason: e.message });
-      }
-    }
-
-    return res.status(200).json({ inserted, skippedDuplicates, skippedInvalid, failed });
+    return res.status(200).json({
+      dryRun,
+      inserted: names('inserted'),
+      skippedDuplicates: names('duplicate'),
+      skippedInvalid: withReason('invalid'),
+      failed: withReason('insert_error'),
+      candidates: run.candidates,
+    });
   } catch (e) {
-    console.error(`discover-tools: ${e.message}`);
-    return res.status(500).json({ error: e.message });
+    const message = redactSecrets(e.message);
+    console.error(`discover-tools: ${message}`);
+    if (!dryRun) await recordCronRun({ proposed: 0, inserted: 0, results: [], error: message });
+    return res.status(500).json({ error: message });
   }
 }
