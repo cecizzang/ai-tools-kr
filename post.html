@@ -111,6 +111,19 @@
       margin-bottom: 8px;
     }
 
+    .official-badge {
+      display: inline-block;
+      font-family: 'IBM Plex Mono', monospace;
+      font-size: 10px;
+      line-height: 1.5;
+      color: var(--accent);
+      border: 1px solid var(--accent);
+      border-radius: 4px;
+      padding: 0 5px;
+      margin-right: 6px;
+      vertical-align: 1px;
+    }
+
     .post-meta {
       font-size: 12px;
       color: var(--muted);
@@ -318,6 +331,7 @@
 </div>
 
 <script src="linkify.js"></script>
+<script src="official.js"></script>
 <script>
   const SUPABASE_URL ='https://clpwrmxegqvzzcqcxdsa.supabase.co';
   const SUPABASE_ANON_KEY = 'sb_publishable_PiSGtCuULXpdHlOgYdWK0A_jmTgqIXQ';
@@ -356,7 +370,11 @@
 
     const metaEl = document.createElement('div');
     metaEl.className = 'post-meta';
-    metaEl.textContent = `${post.nickname} · ${formatRelativeTime(post.created_at)}${post.updated_at ? ' (수정됨)' : ''}`;
+    // 운영자 글이면 닉네임 앞에 목록과 같은 배지. 닉네임이 아니라 is_official로만 판별한다.
+    if (OfficialPosts.isOfficial(post)) metaEl.appendChild(OfficialPosts.officialBadge());
+    metaEl.appendChild(document.createTextNode(
+      `${post.nickname} · ${formatRelativeTime(post.created_at)}${post.updated_at ? ' (수정됨)' : ''}`
+    ));
 
     const bodyEl = document.createElement('div');
     bodyEl.className = 'post-body';
@@ -516,9 +534,9 @@
     const columns = 'id,category,nickname,title,body,image_urls,created_at';
 
     try {
-      let res = await fetchPost(`${columns},updated_at`);
-      // updated_at 컬럼이 아직 없거나 읽기 권한이 없어도(supabase/board-edit.sql 실행 전) 글은 보여야 한다.
-      if (!res.ok) res = await fetchPost(columns);
+      // updated_at·is_official 컬럼이 아직 없거나 읽기 권한이 없어도(supabase/board-edit.sql,
+      // official-posts.sql 실행 전) 글은 보여야 한다 — 못 읽는 컬럼만 빼고 다시 읽는다.
+      const res = await OfficialPosts.fetchWithOptionalColumns(fetchPost, columns, ['updated_at', 'is_official']);
       if (!res.ok) throw new Error(`status ${res.status}`);
       const rows = await res.json();
       const post = rows[0];

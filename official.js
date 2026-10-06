@@ -25,7 +25,22 @@
     return { res: await request(buildUrl(false)), officialAvailable: false };
   }
 
-  const api = { OFFICIAL_LABEL, isOfficial, officialBadge, fetchWithOfficial };
+  // 있으면 쓰고 없어도 되는 컬럼들(optionalColumns)을 붙여서 읽되, 실패하면 하나씩 빼 가며 다시 읽는다.
+  // 많이 포함한 조합부터 시도하고 처음 성공한 응답을 돌려준다 — 전부 실패하면 마지막 응답을 돌려준다.
+  // 예: is_official 읽기 권한이 없어도 글 자체는 나머지 컬럼으로 정상 표시된다.
+  async function fetchWithOptionalColumns(request, baseColumns, optionalColumns) {
+    const subsets = optionalColumns
+      .reduce((sets, column) => sets.concat(sets.map((set) => [...set, column])), [[]])
+      .sort((a, b) => b.length - a.length);
+    let res;
+    for (const subset of subsets) {
+      res = await request([baseColumns, ...subset].join(','));
+      if (res.ok) return res;
+    }
+    return res;
+  }
+
+  const api = { OFFICIAL_LABEL, isOfficial, officialBadge, fetchWithOfficial, fetchWithOptionalColumns };
   if (typeof module !== 'undefined' && module.exports) module.exports = api;
   else root.OfficialPosts = api;
 })(typeof globalThis !== 'undefined' ? globalThis : this);

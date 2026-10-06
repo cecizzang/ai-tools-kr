@@ -479,6 +479,7 @@
 </section>
 
 <script src="official.js"></script>
+<script src="pagination.js"></script>
 <script src="business.js"></script>
 <script>
   const SUPABASE_URL = 'https://clpwrmxegqvzzcqcxdsa.supabase.co';
@@ -600,7 +601,11 @@
   function renderPagination(page, total) {
     const el = document.getElementById('pagination');
     el.textContent = '';
-    const totalPages = Math.max(1, Math.ceil(total / PAGE_SIZE));
+    // 총 페이지가 1 이하면 "이전 1 / 1 다음"을 아예 보여 주지 않는다.
+    const visible = Pagination.shouldShowPagination(page, total, PAGE_SIZE);
+    el.style.display = visible ? '' : 'none';
+    if (!visible) return;
+    const totalPages = Pagination.totalPages(total, PAGE_SIZE);
 
     if (page > 1) {
       const prev = document.createElement('a');
